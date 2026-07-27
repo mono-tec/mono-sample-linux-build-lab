@@ -5,9 +5,9 @@ variable "instance_name" {
 }
 
 variable "image" {
-  description = "Incus image alias"
+  description = "Incus cloud image alias"
   type        = string
-  default     = "images:ubuntu/24.04"
+  default     = "images:ubuntu/24.04/cloud"
 }
 
 variable "cpu_count" {
