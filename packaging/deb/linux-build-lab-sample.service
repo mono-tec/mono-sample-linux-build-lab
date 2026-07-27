@@ -1,0 +1,13 @@
+[Unit]
+Description=Linux Build Lab one-shot sample
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/linux-build-lab-sample
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
