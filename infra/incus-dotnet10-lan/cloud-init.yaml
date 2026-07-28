@@ -1,0 +1,11 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+  - dotnet-sdk-10.0
+
+runcmd:
+  - dotnet --info > /var/log/dotnet-sdk-info.log

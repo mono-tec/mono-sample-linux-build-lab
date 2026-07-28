@@ -6,6 +6,25 @@ package_upgrade: false
 packages:
   - git
   - dotnet-sdk-10.0
+  - openssh-server
+
+ssh_pwauth: true
+
+users:
+  - name: ubuntu
+    groups:
+      - sudo
+    shell: /bin/bash
+    sudo:
+      - ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+
+chpasswd:
+  expire: false
+  users:
+    - name: ubuntu
+      password: 検証用パスワード
 
 runcmd:
+  - systemctl enable --now ssh
   - dotnet --info > /var/log/dotnet-sdk-info.log
