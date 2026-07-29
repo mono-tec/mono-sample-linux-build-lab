@@ -5,6 +5,26 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- アプリケーション情報 -->
+    <AssemblyName>LinuxBuildLab.Sample</AssemblyName>
+    <Product>Linux Build Lab Sample</Product>
+    <Description>
+      Sample application for validating a .NET 10 environment on Linux.
+    </Description>
+    <Authors>mono-tec</Authors>
+    <Company>mono-tec</Company>
+    <Copyright>Copyright © mono-tec 2026</Copyright>
+
+    <!-- ソースコードの出所 -->
+    <RepositoryUrl>
+      https://github.com/mono-tec/mono-sample-linux-build-lab
+    </RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+
+    <!-- 再現可能なビルド -->
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
 
 </Project>
