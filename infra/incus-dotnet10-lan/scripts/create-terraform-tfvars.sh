@@ -51,7 +51,7 @@ echo
 
 # ここへNETWORK_MODEの入力処理を追加
 
-GUGUEST_IPV4_ADDRESS=""
+GUEST_IPV4_ADDRESS=""
 GUEST_IPV4_PREFIX="24"
 
 if [[ "${NETWORK_MODE}" == "static" ]]; then
@@ -61,6 +61,12 @@ if [[ "${NETWORK_MODE}" == "static" ]]; then
 
   if [[ -z "${GUEST_IPV4_ADDRESS}" ]]; then
     echo "[ERROR] staticを選択した場合、固定IPv4アドレスは必須です。"
+    exit 1
+  fi
+
+  if [[ ! "${GUEST_IPV4_ADDRESS}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    echo "[ERROR] IPv4アドレスの形式を確認してください。"
+    echo "[INFO] 例: 192.168.XXX.XXX"
     exit 1
   fi
 
