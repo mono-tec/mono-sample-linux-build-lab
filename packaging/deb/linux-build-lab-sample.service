@@ -6,8 +6,9 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/linux-build-lab-sample
-User=root
-Group=root
+User=ubuntu
+Group=ubuntu
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

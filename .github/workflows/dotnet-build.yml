@@ -72,16 +72,32 @@ jobs:
           cd publish/linux-x64
           zip -r ../LinuxBuildLab.Sample-linux-x64.zip .
 
-      - name: Upload workflow artifact
+      - name: Install Debian package tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Create Debian package
+        shell: bash
+        run: |
+          chmod +x packaging/deb/build-deb.sh
+
+          PACKAGE_VERSION="${VERSION}" \
+          PUBLISH_DIR="${GITHUB_WORKSPACE}/publish/linux-x64" \
+          ./packaging/deb/build-deb.sh
+
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v6
         with:
           name: LinuxBuildLab.Sample-linux-x64
-          path: publish/LinuxBuildLab.Sample-linux-x64.zip
+          path: |
+            publish/LinuxBuildLab.Sample-linux-x64.zip
+            artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
           if-no-files-found: error
           retention-days: 14
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: publish/LinuxBuildLab.Sample-linux-x64.zip
+          files: |
+            publish/LinuxBuildLab.Sample-linux-x64.zip
+            artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
           generate_release_notes: true
