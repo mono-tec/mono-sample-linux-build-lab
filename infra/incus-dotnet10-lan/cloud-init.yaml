@@ -77,7 +77,8 @@ write_files:
       echo "[INFO] Application installation completed."
 
 runcmd:
-  # ubuntuユーザーのアカウントロックを解除
+  # SSHパスワード認証は無効のまま、
+  # 公開鍵認証を許可するためubuntuアカウントのロックを解除
   - |
     PASSWORD_HASH=$(openssl passwd -6 "$(openssl rand -hex 32)")
     usermod -p "$PASSWORD_HASH" ubuntu

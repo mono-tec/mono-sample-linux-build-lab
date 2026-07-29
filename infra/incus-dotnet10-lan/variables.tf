@@ -95,4 +95,3 @@ variable "guest_ipv4_prefix" {
     error_message = "guest_ipv4_prefix must be between 1 and 32."
   }
 }
-}

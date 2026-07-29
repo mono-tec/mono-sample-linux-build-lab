@@ -39,17 +39,28 @@ fi
 
 echo
 
-GUEST_IPV4_ADDRESS="192.168.XXX.XXX"
+read -r -p "IPv4設定方式を選択してください [dhcp/static] [dhcp]: " NETWORK_MODE
+NETWORK_MODE="${NETWORK_MODE:-dhcp}"
+
+if [[ "${NETWORK_MODE}" != "dhcp" && "${NETWORK_MODE}" != "static" ]]; then
+  echo "[ERROR] IPv4設定方式はdhcpまたはstaticを指定してください。"
+  exit 1
+fi
+
+echo
+
+# ここへNETWORK_MODEの入力処理を追加
+
+GUGUEST_IPV4_ADDRESS=""
 GUEST_IPV4_PREFIX="24"
 
 if [[ "${NETWORK_MODE}" == "static" ]]; then
   echo
 
-  read -r -p "コンテナのLAN側固定IPv4アドレスを入力してください [192.168.XXX.XXX]: " GUEST_IPV4_ADDRESS
-  GUEST_IPV4_ADDRESS="${GUEST_IPV4_ADDRESS:-192.168.XXX.XXX}"
+  read -r -p "コンテナのLAN側固定IPv4アドレスを入力してください: " GUEST_IPV4_ADDRESS
 
-  if [[ ! "${GUEST_IPV4_ADDRESS}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-    echo "[ERROR] IPv4アドレスの形式を確認してください。"
+  if [[ -z "${GUEST_IPV4_ADDRESS}" ]]; then
+    echo "[ERROR] staticを選択した場合、固定IPv4アドレスは必須です。"
     exit 1
   fi
 
