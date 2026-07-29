@@ -49,8 +49,6 @@ fi
 
 echo
 
-# ここへNETWORK_MODEの入力処理を追加
-
 GUEST_IPV4_ADDRESS=""
 GUEST_IPV4_PREFIX="24"
 
