@@ -35,13 +35,13 @@ write_files:
         version: 2
         ethernets:
           eth1:
-          %{ if network_mode == "dhcp" ~}
+%{ if network_mode == "dhcp" ~}
             dhcp4: true
-          %{ else ~}
+%{ else ~}
             dhcp4: false
             addresses:
               - ${guest_ipv4_address}/${guest_ipv4_prefix}
-          %{ endif ~}
+%{ endif }
             dhcp6: true
 
   # GitHub Releaseから検証用アプリを取得するスクリプト
