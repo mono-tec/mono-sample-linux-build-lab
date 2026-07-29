@@ -96,13 +96,13 @@ variable "guest_ipv4_prefix" {
   }
 }
 variable "package_version" {
-  description = "GitHub Release‚©‚çæ“¾‚·‚édebƒpƒbƒP[ƒW‚Ìƒo[ƒWƒ‡ƒ“"
+  description = "GitHub Releaseã‹ã‚‰å–å¾—ã™ã‚‹debãƒ‘ãƒƒã‚±ãƒ¼ã‚¸ã®ãƒãƒ¼ã‚¸ãƒ§ãƒ³"
   type        = string
   default     = "0.2.0"
 }
 
 variable "package_name" {
-  description = "æ“¾‚·‚édebƒpƒbƒP[ƒW–¼"
+  description = "å–å¾—ã™ã‚‹debãƒ‘ãƒƒã‚±ãƒ¼ã‚¸å"
   type        = string
   default     = "linux-build-lab-sample"
 }
