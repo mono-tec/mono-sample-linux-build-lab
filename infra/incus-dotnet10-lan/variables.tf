@@ -45,3 +45,25 @@ variable "guest_interface_name" {
   type        = string
   default     = "eth1"
 }
+
+variable "github_repository" {
+  description = "GitHub repository containing the release asset"
+  type        = string
+  default     = "mono-tec/mono-sample-linux-build-lab"
+}
+
+variable "release_version" {
+  description = "GitHub Release tag of the validation .NET 10 application"
+  type        = string
+
+  validation {
+    condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.-]+)?$", var.release_version))
+    error_message = "release_version must use a format such as v0.1.0."
+  }
+}
+
+variable "release_asset_name" {
+  description = "GitHub Release asset file name"
+  type        = string
+  default     = "LinuxBuildLab.Sample-linux-x64.zip"
+}

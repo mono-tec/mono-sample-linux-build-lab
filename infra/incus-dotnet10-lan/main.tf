@@ -22,7 +22,7 @@ resource "incus_instance" "ubuntu2404_dotnet10_lan" {
     "limits.memory" = var.memory_limit
 
     "cloud-init.user-data" = templatefile(
-      "${path.module}/cloud-init.yaml.tftpl",
+      "${path.module}/cloud-init.yaml",
       {
         ssh_public_key    = var.ssh_public_key
         github_repository = var.github_repository

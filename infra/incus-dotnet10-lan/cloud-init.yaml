@@ -19,25 +19,25 @@ write_files:
       APP_NAME="LinuxBuildLab.Sample"
       APP_DIR="/opt/linux-build-lab"
       DOWNLOAD_FILE="/tmp/${release_asset_name}"
-      DOWNLOAD_URL="https://github.com/mono-tec/mono-sample-linux-build-lab/releases/download/${release_version}/${release_asset_name}"
+      DOWNLOAD_URL="https://github.com/${github_repository}/releases/download/${release_version}/${release_asset_name}"
 
-      echo "[INFO] Download URL: ${DOWNLOAD_URL}"
-      echo "[INFO] Install directory: ${APP_DIR}"
+      echo "[INFO] Download URL: $${DOWNLOAD_URL}"
+      echo "[INFO] Install directory: $${APP_DIR}"
 
-      mkdir -p "${APP_DIR}"
+      mkdir -p "$${APP_DIR}"
 
       curl \
         --fail \
         --location \
         --retry 3 \
         --retry-delay 5 \
-        --output "${DOWNLOAD_FILE}" \
-        "${DOWNLOAD_URL}"
+        --output "$${DOWNLOAD_FILE}" \
+        "$${DOWNLOAD_URL}"
 
-      unzip -o "${DOWNLOAD_FILE}" -d "${APP_DIR}"
+      unzip -o "$${DOWNLOAD_FILE}" -d "$${APP_DIR}"
 
-      chmod +x "${APP_DIR}/${APP_NAME}"
-      rm -f "${DOWNLOAD_FILE}"
+      chmod +x "$${APP_DIR}/$${APP_NAME}"
+      rm -f "$${DOWNLOAD_FILE}"
 
       echo "[INFO] Application installation completed."
 
