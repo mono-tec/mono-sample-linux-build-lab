@@ -5,7 +5,48 @@ package_upgrade: false
 
 packages:
   - git
-  - dotnet-sdk-10.0
+  - curl
+  - unzip
+  - dotnet-runtime-10.0
+
+write_files:
+  - path: /usr/local/bin/install-linux-build-lab-sample.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      APP_NAME="LinuxBuildLab.Sample"
+      APP_DIR="/opt/linux-build-lab"
+      DOWNLOAD_FILE="/tmp/${release_asset_name}"
+      DOWNLOAD_URL="https://github.com/mono-tec/mono-sample-linux-build-lab/releases/download/${release_version}/${release_asset_name}"
+
+      echo "[INFO] Download URL: ${DOWNLOAD_URL}"
+      echo "[INFO] Install directory: ${APP_DIR}"
+
+      mkdir -p "${APP_DIR}"
+
+      curl \
+        --fail \
+        --location \
+        --retry 3 \
+        --retry-delay 5 \
+        --output "${DOWNLOAD_FILE}" \
+        "${DOWNLOAD_URL}"
+
+      unzip -o "${DOWNLOAD_FILE}" -d "${APP_DIR}"
+
+      chmod +x "${APP_DIR}/${APP_NAME}"
+      rm -f "${DOWNLOAD_FILE}"
+
+      echo "[INFO] Application installation completed."
 
 runcmd:
-  - dotnet --info > /var/log/dotnet-sdk-info.log
+  # .NET 10のインストール結果をログへ保存します。
+  - dotnet --info > /var/log/dotnet-sdk-info.log 2>&1
+
+  # GitHub Releasesから検証用アプリを取得して配置します。
+  - /usr/local/bin/install-linux-build-lab-sample.sh > /var/log/linux-build-lab-install.log 2>&1
+
+  # 配置した検証用アプリを実行し、結果をログへ保存します。
+  - /opt/linux-build-lab/LinuxBuildLab.Sample > /var/log/linux-build-lab-sample.log 2>&1

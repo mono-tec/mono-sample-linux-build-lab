@@ -78,3 +78,16 @@ guest_interface_name = "eth1"
 #
 # 秘密鍵の内容は絶対に貼り付けないでください。
 ssh_public_key = "ssh-ed25519 AAAA... mono-linux-build-lab"
+
+# ------------------------------------------------------------
+# 検証用 .NET 10 アプリの取得設定
+# ------------------------------------------------------------
+
+# Incusコンテナの初回起動時に、GitHub Releasesから
+# 検証用 .NET 10 アプリを取得するための情報を指定します。
+
+# 取得するGitHub Releaseのタグ名です。
+release_version = "v0.1.0"
+
+# GitHub Releaseに登録されているAssetのファイル名です。
+release_asset_name = "LinuxBuildLab.Sample-linux-x64.zip"

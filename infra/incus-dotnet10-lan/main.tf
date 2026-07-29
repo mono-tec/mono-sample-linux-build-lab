@@ -24,7 +24,10 @@ resource "incus_instance" "ubuntu2404_dotnet10_lan" {
     "cloud-init.user-data" = templatefile(
       "${path.module}/cloud-init.yaml.tftpl",
       {
-        ssh_public_key = var.ssh_public_key
+        ssh_public_key    = var.ssh_public_key
+        github_repository = var.github_repository
+        release_version   = var.release_version
+        release_asset_name = var.release_asset_name
       }
     )
   }
