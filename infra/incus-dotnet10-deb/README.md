@@ -1,4 +1,4 @@
-# Incus .NET 10 LAN環境
+# Incus .NET 10 debパッケージ実行環境
 
 OpenTofuとIncusを使用して、Ubuntu 24.04コンテナを作成します。
 
@@ -10,8 +10,9 @@ OpenTofuとIncusを使用して、Ubuntu 24.04コンテナを作成します。
 - .NET 10 Runtimeのインストール
 - OpenSSH Serverのインストール
 - SSH公開鍵の登録
-- GitHub Releaseから検証用アプリを取得
-- 検証用アプリの実行
+- GitHub Releaseからdebパッケージを取得
+- debパッケージのインストール
+- systemdのoneshotサービスによる検証用アプリの実行
 
 ## 1. Windows側の準備
 
@@ -69,7 +70,7 @@ Get-Content $env:USERPROFILE\.ssh\mono-linux-build-lab.pub
 
 ## 3. terraform.tfvarsの作成
 
-設定生成スクリプトへ実行権限を付与します。
+Ubuntuホストで、設定生成スクリプトへ実行権限を付与します。
 
 ```bash
 chmod +x scripts/create-terraform-tfvars.sh
@@ -87,7 +88,7 @@ chmod +x scripts/create-terraform-tfvars.sh
 - IPv4設定方式（DHCPまたは固定IP）
 - 固定IPv4アドレスとプレフィックス長
 - Windows側で作成したSSH公開鍵
-- 検証用アプリのReleaseバージョン
+- debパッケージを取得するGitHub Releaseのバージョン
 
 生成結果を確認します。
 
@@ -131,7 +132,7 @@ yes
 ## 6. Cloud-initの完了確認
 
 ```bash
-incus exec ubuntu2404-dotnet10-lan -- \
+incus exec ubuntu2404-dotnet10-deb -- \
   cloud-init status --wait
 ```
 
@@ -141,34 +142,97 @@ incus exec ubuntu2404-dotnet10-lan -- \
 status: done
 ```
 
-## 7. 動作確認
-
-ネットワーク設定を確認します。
+Cloud-initの実行結果も確認できます。
 
 ```bash
-incus exec ubuntu2404-dotnet10-lan -- \
+incus exec ubuntu2404-dotnet10-deb -- \
+  cat /var/log/cloud-init-output.log
+```
+
+## 7. 動作確認
+
+### 7.1 ネットワーク設定
+
+```bash
+incus exec ubuntu2404-dotnet10-deb -- \
   ip -br address
 ```
 
-SSHサービスを確認します。
+### 7.2 SSHサービス
 
 ```bash
-incus exec ubuntu2404-dotnet10-lan -- \
+incus exec ubuntu2404-dotnet10-deb -- \
   systemctl is-active ssh
 ```
 
-公開鍵の登録を確認します。
+### 7.3 SSH公開鍵
 
 ```bash
-incus exec ubuntu2404-dotnet10-lan -- \
+incus exec ubuntu2404-dotnet10-deb -- \
   cat /home/ubuntu/.ssh/authorized_keys
 ```
 
-検証用アプリの実行結果を確認します。
+### 7.4 debパッケージ
+
+インストール状態を確認します。
 
 ```bash
-incus exec ubuntu2404-dotnet10-lan -- \
-  cat /var/log/linux-build-lab-sample.log
+incus exec ubuntu2404-dotnet10-deb -- \
+  dpkg -l linux-build-lab-sample
+```
+
+パッケージによって配置されたファイルを確認します。
+
+```bash
+incus exec ubuntu2404-dotnet10-deb -- \
+  dpkg -L linux-build-lab-sample
+```
+
+### 7.5 systemdサービス
+
+サービスの状態を確認します。
+
+```bash
+incus exec ubuntu2404-dotnet10-deb -- \
+  systemctl status linux-build-lab-sample.service --no-pager
+```
+
+正常に実行された場合は、次のような状態になります。
+
+```text
+Active: active (exited)
+```
+
+登録されたUnitファイルを確認します。
+
+```bash
+incus exec ubuntu2404-dotnet10-deb -- \
+  systemctl cat linux-build-lab-sample.service
+```
+
+検証用アプリは、`ubuntu`ユーザーで実行されます。
+
+```ini
+User=ubuntu
+Group=ubuntu
+```
+
+### 7.6 実行ログ
+
+検証用アプリの実行結果は、systemdのJournalへ記録されます。
+
+```bash
+incus exec ubuntu2404-dotnet10-deb -- \
+  journalctl \
+    -u linux-build-lab-sample.service \
+    --no-pager
+```
+
+debパッケージの取得・インストール処理のログは、次で確認できます。
+
+```bash
+incus exec ubuntu2404-dotnet10-deb -- \
+  cat /var/log/linux-build-lab-install.log
 ```
 
 ## 8. WindowsからSSH接続
@@ -190,7 +254,17 @@ Are you sure you want to continue connecting (yes/no/[fingerprint])?
 
 接続先が正しいことを確認して、`yes`を入力します。
 
+接続後、コンテナ内からもパッケージとログを確認できます。
+
+```bash
+dpkg -l | grep linux-build-lab
+sudo systemctl status linux-build-lab-sample.service
+sudo journalctl -u linux-build-lab-sample.service --no-pager
+```
+
 ## 9. コンテナの削除
+
+Ubuntuホストで実行します。
 
 ```bash
 tofu destroy
@@ -211,7 +285,9 @@ tofu destroy
 tofu apply
 ```
 
-Cloud-initは基本的にインスタンスの初回起動時に実行されます。既存コンテナへuser-dataを変更しただけでは、`write_files`や`runcmd`が再実行されない場合があります。
+Cloud-initは基本的にインスタンスの初回起動時に実行されます。
+
+既存コンテナのuser-dataを変更しただけでは、`write_files`や`runcmd`が再実行されない場合があります。
 
 ## Gitへ登録するファイル
 
@@ -219,12 +295,13 @@ Cloud-initは基本的にインスタンスの初回起動時に実行されま�
 
 ```text
 .terraform.lock.hcl
-cloud-init.yaml
+cloud-init.yaml.tftpl
 main.tf
 outputs.tf
 terraform.tfvars.example
 variables.tf
 scripts/create-terraform-tfvars.sh
+README.md
 ```
 
 登録しないもの：

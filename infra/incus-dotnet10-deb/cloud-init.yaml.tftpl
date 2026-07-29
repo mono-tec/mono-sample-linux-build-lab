@@ -1,0 +1,101 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+  - curl
+  - openssh-server
+  - dotnet-runtime-10.0
+
+users:
+  - name: ubuntu
+    gecos: Ubuntu
+    groups:
+      - adm
+      - sudo
+    shell: /bin/bash
+    sudo:
+      - ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+ssh_pwauth: false
+
+write_files:
+  # macvlan側NICでIPv4アドレスを取得する設定
+  - path: /etc/netplan/60-eth1.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth1:
+%{ if network_mode == "dhcp" ~}
+            dhcp4: true
+%{ else ~}
+            dhcp4: false
+            addresses:
+              - ${guest_ipv4_address}/${guest_ipv4_prefix}
+%{ endif }
+            dhcp6: true
+
+  # GitHub Releaseからdebパッケージを取得してインストールするスクリプト
+  - path: /usr/local/bin/install-linux-build-lab-sample.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      PACKAGE_NAME="linux-build-lab-sample"
+      RELEASE_TAG="${release_version}"
+      PACKAGE_VERSION="$${RELEASE_TAG#v}"
+      PACKAGE_FILE="$${PACKAGE_NAME}_$${PACKAGE_VERSION}_amd64.deb"
+      DOWNLOAD_FILE="/tmp/$${PACKAGE_FILE}"
+      DOWNLOAD_URL="https://github.com/${github_repository}/releases/download/$${RELEASE_TAG}/$${PACKAGE_FILE}"
+
+      echo "[INFO] Release tag: $${RELEASE_TAG}"
+      echo "[INFO] Package version: $${PACKAGE_VERSION}"
+      echo "[INFO] Download URL: $${DOWNLOAD_URL}"
+
+      curl \
+        --fail \
+        --location \
+        --retry 3 \
+        --retry-delay 5 \
+        --output "$${DOWNLOAD_FILE}" \
+        "$${DOWNLOAD_URL}"
+
+      apt-get install -y "$${DOWNLOAD_FILE}"
+
+      systemctl daemon-reload
+      systemctl start linux-build-lab-sample.service
+
+      rm -f "$${DOWNLOAD_FILE}"
+
+      echo "[INFO] Debian package installation completed."
+
+runcmd:
+  # SSHパスワード認証は無効のまま、
+  # 公開鍵認証を許可するためubuntuアカウントのロックを解除
+  - |
+    PASSWORD_HASH=$(openssl passwd -6 "$(openssl rand -hex 32)")
+    usermod -p "$PASSWORD_HASH" ubuntu
+
+  # SSHサーバーを起動
+  - systemctl enable --now ssh
+
+  # macvlan側NICの設定を反映
+  - netplan generate
+  - netplan apply
+
+  # .NET Runtime情報をログへ保存
+  - dotnet --info > /var/log/dotnet-runtime-info.log 2>&1
+
+  # debパッケージを取得してインストールし、
+  # systemdのoneshotサービスを実行
+  - /usr/local/bin/install-linux-build-lab-sample.sh > /var/log/linux-build-lab-install.log 2>&1
