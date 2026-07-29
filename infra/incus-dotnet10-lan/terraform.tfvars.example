@@ -1,93 +1,92 @@
-# ============================================================
-# Linux Build Lab
-# OpenTofu ŽÀsŠÂ‹«‚²‚Æ‚ÌÝ’è’l
-#
-# ‚±‚Ìƒtƒ@ƒCƒ‹‚ð terraform.tfvars ‚Æ‚µ‚ÄƒRƒs[‚µA
-# —˜—p‚·‚éUbuntuƒzƒXƒg‚âSSHŒ®‚É‡‚í‚¹‚Ä’l‚ð•ÏX‚µ‚Ä‚­‚¾‚³‚¢B
-#
-# cp terraform.tfvars.example terraform.tfvars
-#
-# terraform.tfvars ‚ÍGitHub‚Ö“o˜^‚µ‚È‚¢‚Å‚­‚¾‚³‚¢B
-# ============================================================
+#!/usr/bin/env bash
 
+set -euo pipefail
 
-# ------------------------------------------------------------
-# IncusƒRƒ“ƒeƒi‚ÌŠî–{Ý’è
-# ------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# ì¬‚·‚éIncusƒRƒ“ƒeƒi–¼‚Å‚·B
-# “¯–¼‚ÌƒRƒ“ƒeƒi‚ªŠù‚É‘¶Ý‚·‚éê‡‚ÍA•Ê‚Ì–¼‘O‚Ö•ÏX‚µ‚Ä‚­‚¾‚³‚¢B
-instance_name = "ubuntu2404-dotnet10-lan"
+EXAMPLE_FILE="${PROJECT_DIR}/terraform.tfvars.example"
+OUTPUT_FILE="${PROJECT_DIR}/terraform.tfvars"
 
-# Žg—p‚·‚éIncusƒCƒ[ƒW‚Å‚·B
-# cloud-init‚ðŽg—p‚·‚é‚½‚ßA––”ö‚ª /cloud ‚ÌƒCƒ[ƒW‚ðŽw’è‚µ‚Ü‚·B
-image = "images:ubuntu/24.04/cloud"
+echo "[INFO] terraform.tfvarsã‚’ä½œæˆã—ã¾ã™ã€‚"
 
-# ƒRƒ“ƒeƒi‚ÖŠ„‚è“–‚Ä‚é‰¼‘zCPU”‚Å‚·B
-cpu_count = 2
+# terraform.tfvars.exampleã®å­˜åœ¨ç¢ºèª
+if [[ ! -f "${EXAMPLE_FILE}" ]]; then
+  echo "[ERROR] ã‚µãƒ³ãƒ—ãƒ«ãƒ•ã‚¡ã‚¤ãƒ«ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã€‚"
+  echo "[ERROR] ${EXAMPLE_FILE}"
+  exit 1
+fi
 
-# ƒRƒ“ƒeƒi‚ÖŠ„‚è“–‚Ä‚éƒƒ‚ƒŠãŒÀ‚Å‚·B
-memory_limit = "2GiB"
+# æ—¢å­˜ãƒ•ã‚¡ã‚¤ãƒ«ã‚’èª¤ã£ã¦ä¸Šæ›¸ãã—ãªã„ã‚ˆã†ã«åœæ­¢
+if [[ -f "${OUTPUT_FILE}" ]]; then
+  echo "[ERROR] terraform.tfvarsã¯ã™ã§ã«å­˜åœ¨ã—ã¾ã™ã€‚"
+  echo "[ERROR] ${OUTPUT_FILE}"
+  echo "[INFO] æ—¢å­˜è¨­å®šã‚’ä¸Šæ›¸ãã—ãªã„ãŸã‚ã€å‡¦ç†ã‚’çµ‚äº†ã—ã¾ã™ã€‚"
+  exit 1
+fi
 
+echo
+echo "[INFO] åˆ©ç”¨å¯èƒ½ãªãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹:"
+ip -br address
+echo
 
-# ------------------------------------------------------------
-# LANÚ‘±Ý’è
-# ------------------------------------------------------------
+# Ubuntuãƒ›ã‚¹ãƒˆã§ä½¿ç”¨ã™ã‚‹æœ‰ç·šLANã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹ã‚’å…¥åŠ›
+read -r -p "æœ‰ç·šLANã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹åã‚’å…¥åŠ›ã—ã¦ãã ã•ã„ [eno1]: " LAN_INTERFACE
+LAN_INTERFACE="${LAN_INTERFACE:-eno1}"
 
-# IncusÝ’èã‚ÌLANƒfƒoƒCƒX–¼‚Å‚·B
-# ’Êí‚ÍŠù’è’l‚Ì‚Ü‚Ü‚Å–â‘è‚ ‚è‚Ü‚¹‚ñB
-lan_device_name = "lan0"
+if [[ ! -d "/sys/class/net/${LAN_INTERFACE}" ]]; then
+  echo "[ERROR] ãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹ãŒå­˜åœ¨ã—ã¾ã›ã‚“ã€‚"
+  echo "[ERROR] ${LAN_INTERFACE}"
+  exit 1
+fi
 
-# UbuntuƒzƒXƒg‘¤‚ÅAWindows PC‚Æ“¯‚¶LAN‚ÖÚ‘±‚µ‚Ä‚¢‚é
-# •¨—ƒlƒbƒgƒ[ƒNƒCƒ“ƒ^[ƒtƒF[ƒX–¼‚ðŽw’è‚µ‚Ü‚·B
-#
-# ŽŸ‚ÌƒRƒ}ƒ“ƒh‚ÅŠm”F‚Å‚«‚Ü‚·B
-#
-# ip -br address
-# ip route
-#
-# —á:
-#   eno1
-#   enp2s0
-#   eth0
-#
-# Wi-FiƒCƒ“ƒ^[ƒtƒF[ƒX‚Å‚Ímacvlan‚ª³í‚É“®ì‚µ‚È‚¢ê‡‚ª‚ ‚é‚½‚ßA
-# ‰Â”\‚Å‚ ‚ê‚Î—LüLANƒCƒ“ƒ^[ƒtƒF[ƒX‚ðŽw’è‚µ‚Ä‚­‚¾‚³‚¢B
-lan_interface = "eno1"
+echo
 
-# ƒRƒ“ƒeƒi“à‚Å•\Ž¦‚³‚ê‚éLAN‘¤ƒCƒ“ƒ^[ƒtƒF[ƒX–¼‚Å‚·B
-# Incus•W€ƒlƒbƒgƒ[ƒN‚ªeth0‚ðŽg—p‚·‚é‚½‚ßA
-# ’Ç‰Á‚·‚éLAN‘¤NIC‚Íeth1‚Æ‚µ‚Ä‚¢‚Ü‚·B
-guest_interface_name = "eth1"
+# Windowså´ã§ä½œæˆã—ãŸSSHå…¬é–‹éµã‚’ç›´æŽ¥å…¥åŠ›
+read -r -p "Windowsã§ä½œæˆã—ãŸSSHå…¬é–‹éµã‚’1è¡Œã§è²¼ã‚Šä»˜ã‘ã¦ãã ã•ã„: " SSH_PUBLIC_KEY
 
+if [[ -z "${SSH_PUBLIC_KEY}" ]]; then
+  echo "[ERROR] SSHå…¬é–‹éµãŒå…¥åŠ›ã•ã‚Œã¦ã„ã¾ã›ã‚“ã€‚"
+  exit 1
+fi
 
-# ------------------------------------------------------------
-# SSHŒöŠJŒ®Ý’è
-# ------------------------------------------------------------
+if [[ ! "${SSH_PUBLIC_KEY}" =~ ^ssh-(ed25519|rsa|ecdsa)[[:space:]]+ ]]; then
+  echo "[ERROR] SSHå…¬é–‹éµã®å½¢å¼ã‚’ç¢ºèªã—ã¦ãã ã•ã„ã€‚"
+  echo "[INFO] ä¾‹: ssh-ed25519 AAAAC3... mono-linux-build-lab"
+  exit 1
+fi
 
-# Windows PC‚©‚çIncusƒRƒ“ƒeƒi‚ÖSSHÚ‘±‚·‚é‚½‚ß‚ÉŽg—p‚·‚é
-# SSHŒöŠJŒ®‚Ì“à—e‚ðA1s‚Ì‚Ü‚Ü“\‚è•t‚¯‚Ü‚·B
-#
-# Windows PowerShell‚ÅŒöŠJŒ®‚ðŠm”F‚·‚é—á:
-#
-# Get-Content $env:USERPROFILE\.ssh\mono-linux-build-lab.pub
-#
-# Ý’è—á:
-#
-# ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... mono-linux-build-lab"
-#
-# ”é–§Œ®‚Ì“à—e‚Íâ‘Î‚É“\‚è•t‚¯‚È‚¢‚Å‚­‚¾‚³‚¢B
-ssh_public_key = "ssh-ed25519 AAAA... mono-linux-build-lab"
+echo
 
-# ------------------------------------------------------------
-# ŒŸØ—p .NET 10 ƒAƒvƒŠ‚ÌŽæ“¾Ý’è
-# ------------------------------------------------------------
+# GitHub Releasesã‹ã‚‰å–å¾—ã™ã‚‹æ¤œè¨¼ã‚¢ãƒ—ãƒªã®ãƒãƒ¼ã‚¸ãƒ§ãƒ³ã‚’å…¥åŠ›
+read -r -p "å–å¾—ã™ã‚‹æ¤œè¨¼ç”¨ .NET 10 ã‚¢ãƒ—ãƒªã®Releaseãƒãƒ¼ã‚¸ãƒ§ãƒ³ã‚’å…¥åŠ›ã—ã¦ãã ã•ã„ [v0.1.0]: " RELEASE_VERSION
+RELEASE_VERSION="${RELEASE_VERSION:-v0.1.0}"
 
-# IncusƒRƒ“ƒeƒi‚Ì‰‰ñ‹N“®Žž‚ÉAGitHub Releases‚©‚ç
-# ŒŸØ—p .NET 10 ƒAƒvƒŠ‚ðŽæ“¾‚·‚é‚½‚ß‚Ìî•ñ‚ðŽw’è‚µ‚Ü‚·B
+if [[ ! "${RELEASE_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+  echo "[ERROR] æ¤œè¨¼ç”¨ .NET 10 ã‚¢ãƒ—ãƒªã®Releaseãƒãƒ¼ã‚¸ãƒ§ãƒ³å½¢å¼ã‚’ç¢ºèªã—ã¦ãã ã•ã„ã€‚"
+  echo "[INFO] ä¾‹: v0.1.0"
+  exit 1
+fi
 
-# Žæ“¾‚·‚éGitHub Release‚Ìƒ^ƒO–¼‚Å‚·B
-release_version = "v0.1.0"
+# ã‚µãƒ³ãƒ—ãƒ«ã‚’ã‚³ãƒ”ãƒ¼ã—ã¦ã€ç’°å¢ƒå›ºæœ‰ã®å€¤ã‚’æ›¸ãæ›ãˆã‚‹
+cp "${EXAMPLE_FILE}" "${OUTPUT_FILE}"
 
-# GitHub Release‚É“o˜^‚³‚ê‚Ä‚¢‚éAsset‚Ìƒtƒ@ƒCƒ‹–¼‚Å‚·B
-release_asset_name = "LinuxBuildLab.Sample-linux-x64.zip"
+sed -i \
+  -e "s|^lan_interface[[:space:]]*=.*|lan_interface = \"${LAN_INTERFACE}\"|" \
+  -e "s|^ssh_public_key[[:space:]]*=.*|ssh_public_key = \"${SSH_PUBLIC_KEY}\"|" \
+  -e "s|^release_version[[:space:]]*=.*|release_version = \"${RELEASE_VERSION}\"|" \
+  "${OUTPUT_FILE}"
+
+# ç’°å¢ƒå›ºæœ‰å€¤ã‚’å«ã‚€ãŸã‚ã€æ‰€æœ‰è€…ã ã‘ãŒèª­ã¿æ›¸ãã§ãã‚‹ã‚ˆã†ã«ã™ã‚‹
+chmod 600 "${OUTPUT_FILE}"
+
+echo
+echo "[INFO] terraform.tfvarsã‚’ä½œæˆã—ã¾ã—ãŸã€‚"
+echo "[INFO] å‡ºåŠ›å…ˆ: ${OUTPUT_FILE}"
+echo
+echo "[INFO] ä¸»ãªè¨­å®šå€¤:"
+echo "  LANã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹ : ${LAN_INTERFACE}"
+echo "  æ¤œè¨¼ç”¨ã‚¢ãƒ—ãƒªRelease  : ${RELEASE_VERSION}"
+echo
+echo "[INFO] æ¬¡ã®ã‚³ãƒžãƒ³ãƒ‰ã§å†…å®¹ã‚’ç¢ºèªã—ã¦ãã ã•ã„ã€‚"
+echo "  cat \"${OUTPUT_FILE}\""
