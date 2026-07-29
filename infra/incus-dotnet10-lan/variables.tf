@@ -67,3 +67,32 @@ variable "release_asset_name" {
   type        = string
   default     = "LinuxBuildLab.Sample-linux-x64.zip"
 }
+
+variable "network_mode" {
+  description = "IPv4 configuration mode for eth1: dhcp or static"
+  type        = string
+  default     = "dhcp"
+
+  validation {
+    condition     = contains(["dhcp", "static"], var.network_mode)
+    error_message = "network_mode must be either dhcp or static."
+  }
+}
+
+variable "guest_ipv4_address" {
+  description = "Static IPv4 address assigned to eth1"
+  type        = string
+  default     = "192.168.XXX.XXX"
+}
+
+variable "guest_ipv4_prefix" {
+  description = "IPv4 prefix length assigned to eth1"
+  type        = number
+  default     = 24
+
+  validation {
+    condition     = var.guest_ipv4_prefix >= 1 && var.guest_ipv4_prefix <= 32
+    error_message = "guest_ipv4_prefix must be between 1 and 32."
+  }
+}
+}

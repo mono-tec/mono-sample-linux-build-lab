@@ -60,6 +60,13 @@ lan_interface = "eno1"
 # 追加するLAN側NICはeth1としています。
 guest_interface_name = "eth1"
 
+# eth1のIPv4設定方式
+# dhcp または static
+network_mode = "dhcp"
+
+# network_modeがstaticの場合に使用
+guest_ipv4_address = "192.168.10.120"
+guest_ipv4_prefix  = 24
 
 # ------------------------------------------------------------
 # SSH公開鍵設定

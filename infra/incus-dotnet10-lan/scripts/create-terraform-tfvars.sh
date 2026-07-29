@@ -10,14 +10,12 @@ OUTPUT_FILE="${PROJECT_DIR}/terraform.tfvars"
 
 echo "[INFO] terraform.tfvarsを作成します。"
 
-# terraform.tfvars.exampleの存在確認
 if [[ ! -f "${EXAMPLE_FILE}" ]]; then
   echo "[ERROR] サンプルファイルが見つかりません。"
   echo "[ERROR] ${EXAMPLE_FILE}"
   exit 1
 fi
 
-# 既存ファイルを誤って上書きしないように停止
 if [[ -f "${OUTPUT_FILE}" ]]; then
   echo "[ERROR] terraform.tfvarsはすでに存在します。"
   echo "[ERROR] ${OUTPUT_FILE}"
@@ -30,7 +28,6 @@ echo "[INFO] 利用可能なネットワークインターフェース:"
 ip -br address
 echo
 
-# Ubuntuホストで使用する有線LANインターフェースを入力
 read -r -p "有線LANインターフェース名を入力してください [eno1]: " LAN_INTERFACE
 LAN_INTERFACE="${LAN_INTERFACE:-eno1}"
 
@@ -42,7 +39,41 @@ fi
 
 echo
 
-# Windows側で作成したSSH公開鍵を直接入力
+GUEST_IPV4_ADDRESS="192.168.XXX.XXX"
+GUEST_IPV4_PREFIX="24"
+
+if [[ "${NETWORK_MODE}" == "static" ]]; then
+  echo
+
+  read -r -p "コンテナのLAN側固定IPv4アドレスを入力してください [192.168.XXX.XXX]: " GUEST_IPV4_ADDRESS
+  GUEST_IPV4_ADDRESS="${GUEST_IPV4_ADDRESS:-192.168.XXX.XXX}"
+
+  if [[ ! "${GUEST_IPV4_ADDRESS}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    echo "[ERROR] IPv4アドレスの形式を確認してください。"
+    exit 1
+  fi
+
+  IFS='.' read -r -a IPV4_OCTETS <<< "${GUEST_IPV4_ADDRESS}"
+
+  for OCTET in "${IPV4_OCTETS[@]}"; do
+    if (( 10#${OCTET} < 0 || 10#${OCTET} > 255 )); then
+      echo "[ERROR] IPv4アドレスの各値は0～255で指定してください。"
+      exit 1
+    fi
+  done
+
+  read -r -p "IPv4プレフィックス長を入力してください [24]: " GUEST_IPV4_PREFIX
+  GUEST_IPV4_PREFIX="${GUEST_IPV4_PREFIX:-24}"
+
+  if [[ ! "${GUEST_IPV4_PREFIX}" =~ ^[0-9]+$ ]] ||
+     (( GUEST_IPV4_PREFIX < 1 || GUEST_IPV4_PREFIX > 32 )); then
+    echo "[ERROR] IPv4プレフィックス長は1～32で指定してください。"
+    exit 1
+  fi
+fi
+
+echo
+
 read -r -p "Windowsで作成したSSH公開鍵を1行で貼り付けてください: " SSH_PUBLIC_KEY
 
 if [[ -z "${SSH_PUBLIC_KEY}" ]]; then
@@ -58,7 +89,6 @@ fi
 
 echo
 
-# GitHub Releasesから取得する検証アプリのバージョンを入力
 read -r -p "取得する検証用 .NET 10 アプリのReleaseバージョンを入力してください [v0.1.0]: " RELEASE_VERSION
 RELEASE_VERSION="${RELEASE_VERSION:-v0.1.0}"
 
@@ -68,16 +98,17 @@ if [[ ! "${RELEASE_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]
   exit 1
 fi
 
-# サンプルをコピーして、環境固有の値を書き換える
 cp "${EXAMPLE_FILE}" "${OUTPUT_FILE}"
 
 sed -i \
   -e "s|^lan_interface[[:space:]]*=.*|lan_interface = \"${LAN_INTERFACE}\"|" \
+  -e "s|^network_mode[[:space:]]*=.*|network_mode = \"${NETWORK_MODE}\"|" \
+  -e "s|^guest_ipv4_address[[:space:]]*=.*|guest_ipv4_address = \"${GUEST_IPV4_ADDRESS}\"|" \
+  -e "s|^guest_ipv4_prefix[[:space:]]*=.*|guest_ipv4_prefix = ${GUEST_IPV4_PREFIX}|" \
   -e "s|^ssh_public_key[[:space:]]*=.*|ssh_public_key = \"${SSH_PUBLIC_KEY}\"|" \
   -e "s|^release_version[[:space:]]*=.*|release_version = \"${RELEASE_VERSION}\"|" \
   "${OUTPUT_FILE}"
 
-# 環境固有値を含むため、所有者だけが読み書きできるようにする
 chmod 600 "${OUTPUT_FILE}"
 
 echo
@@ -86,6 +117,12 @@ echo "[INFO] 出力先: ${OUTPUT_FILE}"
 echo
 echo "[INFO] 主な設定値:"
 echo "  LANインターフェース : ${LAN_INTERFACE}"
+echo "  IPv4設定方式         : ${NETWORK_MODE}"
+
+if [[ "${NETWORK_MODE}" == "static" ]]; then
+  echo "  LAN側固定IPv4        : ${GUEST_IPV4_ADDRESS}/${GUEST_IPV4_PREFIX}"
+fi
+
 echo "  検証用アプリRelease  : ${RELEASE_VERSION}"
 echo
 echo "[INFO] 次のコマンドで内容を確認してください。"
