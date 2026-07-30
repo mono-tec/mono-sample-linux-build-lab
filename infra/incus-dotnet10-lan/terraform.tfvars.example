@@ -65,7 +65,7 @@ guest_interface_name = "eth1"
 network_mode = "dhcp"
 
 # network_modeがstaticの場合に使用
-guest_ipv4_address = "192.168.10.120"
+guest_ipv4_address = "192.168.XXX.XXX"
 guest_ipv4_prefix  = 24
 
 # ------------------------------------------------------------

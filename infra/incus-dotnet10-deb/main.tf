@@ -11,7 +11,7 @@ terraform {
 
 provider "incus" {}
 
-resource "incus_instance" "ubuntu2404_dotnet10_lan" {
+resource "incus_instance" "ubuntu2404_dotnet10_deb" {
   name     = var.instance_name
   image    = var.image
   type     = "container"

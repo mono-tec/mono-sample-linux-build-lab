@@ -134,6 +134,8 @@ yes
 
 ## 6. Cloud-initの完了確認
 
+Ubuntuホストで、Cloud-initの完了を待ちます。
+
 ```bash
 incus exec ubuntu2404-dotnet10-deb -- \
   cloud-init status --wait
@@ -145,102 +147,25 @@ incus exec ubuntu2404-dotnet10-deb -- \
 status: done
 ```
 
-Cloud-initの実行結果も確認できます。
-
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  cat /var/log/cloud-init-output.log
-```
-
-## 7. 動作確認
-
-### 7.1 ネットワーク設定
+コンテナのネットワーク設定を確認します。
 
 ```bash
 incus exec ubuntu2404-dotnet10-deb -- \
   ip -br address
 ```
 
-### 7.2 SSHサービス
+`eth1`に設定されたIPv4アドレスを確認してください。
+
+Cloud-initの処理でエラーが発生した場合は、次のログを確認します。
 
 ```bash
 incus exec ubuntu2404-dotnet10-deb -- \
-  systemctl is-active ssh
+  cat /var/log/cloud-init-output.log
 ```
 
-### 7.3 SSH公開鍵
+## 7. WindowsからSSH接続
 
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  cat /home/ubuntu/.ssh/authorized_keys
-```
-
-### 7.4 debパッケージ
-
-インストール状態を確認します。
-
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  dpkg -l linux-build-lab-sample
-```
-
-パッケージによって配置されたファイルを確認します。
-
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  dpkg -L linux-build-lab-sample
-```
-
-### 7.5 systemdサービス
-
-サービスの状態を確認します。
-
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  systemctl status linux-build-lab-sample.service --no-pager
-```
-
-正常に実行された場合は、次のような状態になります。
-
-```text
-Active: active (exited)
-```
-
-登録されたUnitファイルを確認します。
-
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  systemctl cat linux-build-lab-sample.service
-```
-
-検証用アプリは、`ubuntu`ユーザーで実行されます。
-
-```ini
-User=ubuntu
-Group=ubuntu
-```
-
-### 7.6 実行ログ
-
-検証用アプリの実行結果は、systemdのJournalへ記録されます。
-
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  journalctl \
-    -u linux-build-lab-sample.service \
-    --no-pager
-```
-
-debパッケージの取得・インストール処理のログは、次で確認できます。
-
-```bash
-incus exec ubuntu2404-dotnet10-deb -- \
-  cat /var/log/linux-build-lab-install.log
-```
-
-## 8. WindowsからSSH接続
-
-`eth1`に設定されたIPv4アドレスを指定します。
+Windows PowerShellから、`eth1`に設定されたIPv4アドレスを指定して接続します。
 
 ```powershell
 ssh `
@@ -249,7 +174,7 @@ ssh `
   ubuntu@192.168.xxx.xxx
 ```
 
-初回接続時にはホスト鍵の確認が表示されます。
+初回接続時には、ホスト鍵の確認が表示されます。
 
 ```text
 Are you sure you want to continue connecting (yes/no/[fingerprint])?
@@ -257,12 +182,113 @@ Are you sure you want to continue connecting (yes/no/[fingerprint])?
 
 接続先が正しいことを確認して、`yes`を入力します。
 
-接続後、コンテナ内からもパッケージとログを確認できます。
+## 8. Windowsから動作確認
+
+以降のコマンドは、WindowsからSSH接続したコンテナ内で実行します。
+
+### 8.1 OSと.NET Runtime
+
+```bash
+cat /etc/os-release
+dotnet --info
+```
+
+### 8.2 debパッケージ
+
+インストール状態を確認します。
 
 ```bash
 dpkg -l | grep linux-build-lab
-sudo systemctl status linux-build-lab-sample.service
-sudo journalctl -u linux-build-lab-sample.service --no-pager
+```
+
+パッケージによって配置されたファイルを確認します。
+
+```bash
+dpkg -L linux-build-lab-sample
+```
+
+### 8.3 systemd Unit
+
+登録されたUnitファイルを確認します。
+
+```bash
+sudo systemctl cat linux-build-lab-sample.service
+```
+
+検証用アプリが、`ubuntu`ユーザーで実行される設定になっていることを確認します。
+
+```ini
+User=ubuntu
+Group=ubuntu
+```
+
+サービスの有効化状態を確認します。
+
+```bash
+sudo systemctl is-enabled linux-build-lab-sample.service
+```
+
+今回の構成では、Cloud-initから1回だけ起動し、OS起動時の自動実行は有効化していないため、次の表示になります。
+
+```text
+disabled
+```
+
+サービスの実行状態を確認します。
+
+```bash
+sudo systemctl status \
+  linux-build-lab-sample.service \
+  --no-pager
+```
+
+正常に実行された場合は、次のような状態になります。
+
+```text
+Active: active (exited)
+```
+
+### 8.4 アプリの実行ログ
+
+systemdのJournalへ記録された実行結果を確認します。
+
+```bash
+sudo journalctl \
+  -u linux-build-lab-sample.service \
+  --no-pager
+```
+
+次のような.NETアプリの出力が確認できれば成功です。
+
+```text
+Linux Build Lab Sample
+OS       : Ubuntu 24.04
+Architecture: X64
+.NET     : .NET 10
+Hello from .NET 10 on Linux!
+```
+
+### 8.5 debパッケージのインストールログ
+
+GitHub Releaseからの取得と、debパッケージのインストール処理を確認します。
+
+```bash
+sudo cat /var/log/linux-build-lab-install.log
+```
+
+## 実行の流れ
+
+```text
+Ubuntuホスト
+  ├─ tofu apply
+  ├─ Cloud-init完了確認
+  └─ eth1のIPアドレス確認
+
+Windows
+  ├─ SSH接続
+  ├─ debパッケージ確認
+  ├─ systemd Unit確認
+  └─ journalctlで実行結果確認
 ```
 
 ## 9. コンテナの削除

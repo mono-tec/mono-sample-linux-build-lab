@@ -17,7 +17,7 @@
 
 # 作成するIncusコンテナ名です。
 # 同名のコンテナが既に存在する場合は、別の名前へ変更してください。
-instance_name = "ubuntu2404-dotnet10-lan"
+instance_name = "ubuntu2404-dotnet10-deb"
 
 # 使用するIncusイメージです。
 # cloud-initを使用するため、末尾が /cloud のイメージを指定します。
@@ -65,7 +65,7 @@ guest_interface_name = "eth1"
 network_mode = "dhcp"
 
 # network_modeがstaticの場合に使用
-guest_ipv4_address = "192.168.10.120"
+guest_ipv4_address = "192.168.XXX.XXX"
 guest_ipv4_prefix  = 24
 
 # ------------------------------------------------------------
@@ -85,17 +85,3 @@ guest_ipv4_prefix  = 24
 #
 # 秘密鍵の内容は絶対に貼り付けないでください。
 ssh_public_key = "ssh-ed25519 AAAA... mono-linux-build-lab"
-
-
-# ------------------------------------------------------------
-# 検証用 .NET 10 アプリの取得設定
-# ------------------------------------------------------------
-
-# Incusコンテナの初回起動時に、GitHub Releasesから
-# 検証用 .NET 10 アプリを取得するための情報を指定します。
-
-# 取得するGitHub Releaseのタグ名です。
-release_version = "v0.1.0"
-
-# GitHub Releaseに登録されているAssetのファイル名です。
-release_asset_name = "LinuxBuildLab.Sample-linux-x64.zip"
