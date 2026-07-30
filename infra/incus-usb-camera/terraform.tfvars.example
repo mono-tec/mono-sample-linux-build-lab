@@ -1,0 +1,149 @@
+# ============================================================
+# Linux Build Lab
+# OpenTofu実行環境ごとの設定値
+#
+# このファイルを terraform.tfvars としてコピーし、
+# 利用するUbuntuホストやSSH鍵に合わせて値を変更してください。
+#
+# cp terraform.tfvars.example terraform.tfvars
+#
+# terraform.tfvars はGitHubへ登録しないでください。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# Incusコンテナの基本設定
+# ------------------------------------------------------------
+
+# 作成するIncusコンテナ名です。
+# 同名のコンテナが既に存在する場合は、別の名前へ変更してください。
+instance_name = "ubuntu2404-usb-camera"
+
+# 使用するIncusイメージです。
+# cloud-initを使用するため、末尾が /cloud のイメージを指定します。
+image = "images:ubuntu/24.04/cloud"
+
+# コンテナへ割り当てる仮想CPU数です。
+cpu_count = 2
+
+# コンテナへ割り当てるメモリ上限です。
+memory_limit = "2GiB"
+
+
+# ------------------------------------------------------------
+# LAN接続設定
+# ------------------------------------------------------------
+
+# Incus設定上のLANデバイス名です。
+# 通常は既定値のままで問題ありません。
+lan_device_name = "lan0"
+
+# Ubuntuホスト側で、Windows PCと同じLANへ接続している
+# 物理ネットワークインターフェース名を指定します。
+#
+# 次のコマンドで確認できます。
+#
+# ip -br address
+# ip route
+#
+# 例:
+#   eno1
+#   enp2s0
+#   eth0
+#
+# Wi-Fiインターフェースではmacvlanが正常に動作しない場合があるため、
+# 可能であれば有線LANインターフェースを指定してください。
+lan_interface = "eno1"
+
+# コンテナ内で表示されるLAN側インターフェース名です。
+# Incus標準ネットワークがeth0を使用するため、
+# 追加するLAN側NICはeth1としています。
+guest_interface_name = "eth1"
+
+# eth1のIPv4設定方式です。
+# dhcp または static を指定します。
+network_mode = "dhcp"
+
+# network_modeがstaticの場合に使用します。
+guest_ipv4_address = "192.168.XXX.XXX"
+guest_ipv4_prefix  = 24
+
+
+# ------------------------------------------------------------
+# USBカメラ設定
+# ------------------------------------------------------------
+
+# Incus設定上のカメラデバイス名です。
+camera_device_name = "camera0"
+
+# Ubuntuホスト側の映像デバイスです。
+#
+# 次のコマンドで確認できます。
+#
+# ls -l /dev/video*
+# ls -l /dev/v4l/by-id/
+#
+# 本検証では映像取得用の /dev/video0 を使用します。
+camera_source_path = "/dev/video0"
+
+# Incusコンテナ内へ作成する映像デバイスのパスです。
+camera_guest_path = "/dev/video0"
+
+# コンテナ内のvideoグループのGIDです。
+#
+# 次のコマンドで確認できます。
+#
+# getent group video
+camera_group_id = 44
+
+# rootユーザーとvideoグループへ読み書き権限を付与します。
+camera_device_mode = "0660"
+
+
+# ------------------------------------------------------------
+# SSH公開鍵設定
+# ------------------------------------------------------------
+
+# Windows PCからIncusコンテナへSSH接続するために使用する
+# SSH公開鍵の内容を、1行のまま貼り付けます。
+#
+# Windows PowerShellで公開鍵を確認する例:
+#
+# Get-Content $env:USERPROFILE\.ssh\mono-linux-build-lab.pub
+#
+# 設定例:
+#
+# ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... mono-linux-build-lab"
+#
+# 秘密鍵の内容は絶対に貼り付けないでください。
+ssh_public_key = "ssh-ed25519 AAAA... mono-linux-build-lab"
+
+
+# ------------------------------------------------------------
+# USBカメラ設定
+# ------------------------------------------------------------
+
+# Incus設定上のカメラデバイス名です。
+camera_device_name = "camera0"
+
+# Ubuntuホスト側の映像デバイスです。
+#
+# 次のコマンドで確認できます。
+#
+# ls -l /dev/video*
+# ls -l /dev/v4l/by-id/
+camera_source_path = "/dev/video0"
+
+# Incusコンテナ内へ作成する映像デバイスのパスです。
+camera_guest_path = "/dev/video0"
+
+# コンテナ内のvideoグループのGIDです。
+#
+# 次のコマンドで確認できます。
+#
+# getent group video
+camera_group_id = 44
+
+# rootユーザーとvideoグループへ
+# 読み書き権限を付与します。
+camera_device_mode = "0660"
