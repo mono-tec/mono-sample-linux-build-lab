@@ -1,286 +1,121 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-# ============================================================
-# パスと既定値
-# ============================================================
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-VARIABLES_FILE="${CONFIG_DIR}/variables.tf"
-OUTPUT_FILE="${CONFIG_DIR}/terraform.tfvars"
-
-DEFAULT_GITHUB_REPOSITORY="mono-tec/mono-sample-linux-build-lab"
-
-DEFAULT_PACKAGE_NAME="$(
-  sed -n '
-    /variable "package_name"/,/^}/ {
-      s/^[[:space:]]*default[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p
-    }
-  ' "${VARIABLES_FILE}"
-)"
-
-DEFAULT_PACKAGE_VERSION="$(
-  sed -n '
-    /variable "package_version"/,/^}/ {
-      s/^[[:space:]]*default[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p
-    }
-  ' "${VARIABLES_FILE}"
-)"
-
-if [[ -z "${DEFAULT_PACKAGE_NAME}" ]]; then
-  echo "[ERROR] variables.tfからpackage_nameの既定値を取得できませんでした。"
-  exit 1
-fi
-
-if [[ -z "${DEFAULT_PACKAGE_VERSION}" ]]; then
-  echo "[ERROR] variables.tfからpackage_versionの既定値を取得できませんでした。"
-  exit 1
-fi
-
-
-# ============================================================
-# 共通関数
-# ============================================================
-
-escape_hcl_string() {
-  local value="$1"
-
-  value="${value//\\/\\\\}"
-  value="${value//\"/\\\"}"
-
-  printf '%s' "$value"
+variable "instance_name" {
+  description = "Incus instance name"
+  type        = string
+  default     = "ubuntu2404-dotnet10-deb"
 }
 
-validate_ipv4_address() {
-  local address="$1"
-  local octet
-  local -a octets
-
-  if [[ ! "${address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-    return 1
-  fi
-
-  IFS='.' read -r -a octets <<< "${address}"
-
-  for octet in "${octets[@]}"; do
-    if ((10#$octet < 0 || 10#$octet > 255)); then
-      return 1
-    fi
-  done
-
-  return 0
+variable "image" {
+  description = "Incus cloud image alias"
+  type        = string
+  default     = "images:ubuntu/24.04/cloud"
 }
 
-validate_ipv4_prefix() {
-  local prefix="$1"
+variable "cpu_count" {
+  description = "Number of virtual CPUs assigned to the container"
+  type        = number
+  default     = 2
 
-  if [[ ! "${prefix}" =~ ^[0-9]+$ ]]; then
-    return 1
-  fi
-
-  if ((prefix < 1 || prefix > 32)); then
-    return 1
-  fi
-
-  return 0
+  validation {
+    condition     = var.cpu_count >= 1
+    error_message = "cpu_count must be one or greater."
+  }
 }
 
+variable "memory_limit" {
+  description = "Memory limit assigned to the container"
+  type        = string
+  default     = "2GiB"
+}
 
-# ============================================================
-# LAN設定
-# ============================================================
+variable "ssh_public_key" {
+  description = "SSH public key registered for the ubuntu user"
+  type        = string
+  sensitive   = true
+}
 
-echo "========================================"
-echo "terraform.tfvars作成"
-echo "========================================"
-echo
+variable "lan_device_name" {
+  description = "Incus device name for the LAN interface"
+  type        = string
+  default     = "lan0"
+}
 
-echo "利用可能なネットワークインターフェース:"
-ip -brief link show | awk '{ print "  - " $1 }'
-echo
+variable "lan_interface" {
+  description = "Host physical network interface connected to the LAN"
+  type        = string
+  default     = "eno1"
+}
 
-read -r -p \
-  "Ubuntuホストの有線LANインターフェース名を入力してください: " \
-  lan_interface
+variable "guest_interface_name" {
+  description = "Network interface name inside the Incus container"
+  type        = string
+  default     = "eth1"
+}
 
-if [[ -z "${lan_interface}" ]]; then
-  echo "[ERROR] ネットワークインターフェース名が入力されていません。"
-  exit 1
-fi
+variable "network_mode" {
+  description = "IPv4 configuration mode for eth1: dhcp or static"
+  type        = string
+  default     = "dhcp"
 
-if ! ip link show "${lan_interface}" >/dev/null 2>&1; then
-  echo "[ERROR] ネットワークインターフェースが見つかりません: ${lan_interface}"
-  exit 1
-fi
+  validation {
+    condition     = contains(["dhcp", "static"], var.network_mode)
+    error_message = "network_mode must be either dhcp or static."
+  }
+}
 
-echo
-echo "IPv4設定方式を選択してください。"
-echo "  1: DHCP"
-echo "  2: 固定IP"
-echo
+variable "guest_ipv4_address" {
+  description = "Static IPv4 address assigned to eth1"
+  type        = string
+  default     = ""
 
-while true; do
-  read -r -p "選択 [1/2]: " network_selection
+  validation {
+    condition = (
+      var.network_mode == "dhcp" ||
+      can(cidrhost("${var.guest_ipv4_address}/${var.guest_ipv4_prefix}", 0))
+    )
+    error_message = "guest_ipv4_address must be a valid IPv4 address when network_mode is static."
+  }
+}
 
-  case "${network_selection}" in
-    1)
-      network_mode="dhcp"
-      guest_ipv4_address=""
-      guest_ipv4_prefix=24
-      break
-      ;;
+variable "guest_ipv4_prefix" {
+  description = "IPv4 prefix length assigned to eth1"
+  type        = number
+  default     = 24
 
-    2)
-      network_mode="static"
+  validation {
+    condition     = var.guest_ipv4_prefix >= 1 && var.guest_ipv4_prefix <= 32
+    error_message = "guest_ipv4_prefix must be between 1 and 32."
+  }
+}
 
-      while true; do
-        read -r -p \
-          "コンテナへ設定する固定IPv4アドレスを入力してください: " \
-          guest_ipv4_address
+variable "github_repository" {
+  description = "GitHub repository containing the release asset"
+  type        = string
+  default     = "mono-tec/mono-sample-linux-build-lab"
+}
 
-        if validate_ipv4_address "${guest_ipv4_address}"; then
-          break
-        fi
+variable "package_name" {
+  description = "Name of the deb package downloaded from GitHub Release"
+  type        = string
+  default     = "linux-build-lab-sample"
 
-        echo "[ERROR] IPv4アドレスの形式が正しくありません。"
-      done
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9+.-]*$", var.package_name))
+    error_message = "package_name must use a valid Debian package name."
+  }
+}
 
-      while true; do
-        read -r -p \
-          "IPv4プレフィックス長を入力してください [24]: " \
-          guest_ipv4_prefix
+variable "package_version" {
+  description = "Version of the deb package downloaded from GitHub Release"
+  type        = string
+  default     = "0.3.1"
 
-        guest_ipv4_prefix="${guest_ipv4_prefix:-24}"
-
-        if validate_ipv4_prefix "${guest_ipv4_prefix}"; then
-          break
-        fi
-
-        echo "[ERROR] プレフィックス長は1から32の範囲で入力してください。"
-      done
-
-      break
-      ;;
-
-    *)
-      echo "[ERROR] 1または2を入力してください。"
-      ;;
-  esac
-done
-
-
-# ============================================================
-# SSH公開鍵
-# ============================================================
-
-echo
-echo "Windows側で作成したSSH公開鍵を入力してください。"
-echo "例: ssh-ed25519 AAAA... mono-linux-build-lab"
-echo
-
-read -r -p "SSH公開鍵: " ssh_public_key
-
-if [[ -z "${ssh_public_key}" ]]; then
-  echo "[ERROR] SSH公開鍵が入力されていません。"
-  exit 1
-fi
-
-if [[ ! "${ssh_public_key}" =~ ^ssh-(ed25519|rsa)[[:space:]] ]]; then
-  echo "[ERROR] SSH公開鍵の形式を確認してください。"
-  exit 1
-fi
-
-
-# ============================================================
-# GitHub Releaseとdebパッケージ
-# ============================================================
-
-echo
-
-read -r -p \
-  "GitHub Repository [${DEFAULT_GITHUB_REPOSITORY}]: " \
-  github_repository
-
-github_repository="${github_repository:-${DEFAULT_GITHUB_REPOSITORY}}"
-
-read -r -p \
-  "debパッケージ名 [${DEFAULT_PACKAGE_NAME}]: " \
-  package_name
-
-package_name="${package_name:-${DEFAULT_PACKAGE_NAME}}"
-
-read -r -p \
-  "debパッケージのバージョン [${DEFAULT_PACKAGE_VERSION}]: " \
-  package_version
-
-package_version="${package_version:-${DEFAULT_PACKAGE_VERSION}}"
-
-if [[ ! "${package_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-  echo "[ERROR] パッケージバージョンは0.3.1のような形式で入力してください。"
-  exit 1
-fi
-
-
-# ============================================================
-# HCL文字列のエスケープ
-# ============================================================
-
-escaped_lan_interface="$(
-  escape_hcl_string "${lan_interface}"
-)"
-
-escaped_network_mode="$(
-  escape_hcl_string "${network_mode}"
-)"
-
-escaped_guest_ipv4_address="$(
-  escape_hcl_string "${guest_ipv4_address}"
-)"
-
-escaped_ssh_public_key="$(
-  escape_hcl_string "${ssh_public_key}"
-)"
-
-escaped_github_repository="$(
-  escape_hcl_string "${github_repository}"
-)"
-
-escaped_package_name="$(
-  escape_hcl_string "${package_name}"
-)"
-
-escaped_package_version="$(
-  escape_hcl_string "${package_version}"
-)"
-
-
-# ============================================================
-# terraform.tfvarsの作成
-# ============================================================
-
-cat > "${OUTPUT_FILE}" <<EOF
-lan_interface = "${escaped_lan_interface}"
-
-network_mode       = "${escaped_network_mode}"
-guest_ipv4_address = "${escaped_guest_ipv4_address}"
-guest_ipv4_prefix  = ${guest_ipv4_prefix}
-
-ssh_public_key = "${escaped_ssh_public_key}"
-
-github_repository = "${escaped_github_repository}"
-package_name       = "${escaped_package_name}"
-package_version    = "${escaped_package_version}"
-EOF
-
-chmod 600 "${OUTPUT_FILE}"
-
-echo
-echo "========================================"
-echo "${OUTPUT_FILE}を作成しました。"
-echo "========================================"
-echo
-cat "${OUTPUT_FILE}"
-echo
-echo "[INFO] ${OUTPUT_FILE}はGitへ登録しないでください。"
+  validation {
+    condition = can(
+      regex(
+        "^[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.-]+)?$",
+        var.package_version
+      )
+    )
+    error_message = "package_version must use a format such as X.Y.Z."
+  }
+}

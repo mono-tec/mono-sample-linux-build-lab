@@ -103,15 +103,15 @@ echo
 
 read -r -p \
   "Ubuntuホストの有線LANインターフェース名を入力してください: " \
-  lan_interface
+  host_lan_interface
 
-if [[ -z "${lan_interface}" ]]; then
+if [[ -z "${host_lan_interface}" ]]; then
   echo "[ERROR] ネットワークインターフェース名が入力されていません。"
   exit 1
 fi
 
-if ! ip link show "${lan_interface}" >/dev/null 2>&1; then
-  echo "[ERROR] ネットワークインターフェースが見つかりません: ${lan_interface}"
+if ! ip link show "${host_lan_interface}" >/dev/null 2>&1; then
+  echo "[ERROR] ネットワークインターフェースが見つかりません: ${host_lan_interface}"
   exit 1
 fi
 
@@ -227,8 +227,8 @@ fi
 # HCL文字列のエスケープ
 # ============================================================
 
-escaped_lan_interface="$(
-  escape_hcl_string "${lan_interface}"
+escaped_host_lan_interface="$(
+  escape_hcl_string "${host_lan_interface}"
 )"
 
 escaped_network_mode="$(
@@ -261,7 +261,7 @@ escaped_package_version="$(
 # ============================================================
 
 cat > "${OUTPUT_FILE}" <<EOF
-lan_interface = "${escaped_lan_interface}"
+host_lan_interface = "${escaped_host_lan_interface}"
 
 network_mode       = "${escaped_network_mode}"
 guest_ipv4_address = "${escaped_guest_ipv4_address}"

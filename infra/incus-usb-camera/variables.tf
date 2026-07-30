@@ -93,7 +93,7 @@ variable "package_version" {
       )
     )
 
-    error_message = "package_version must use a format such as 0.3.0."
+    error_message = "package_version must use a format such as X.Y.Z."
   }
 }
 
