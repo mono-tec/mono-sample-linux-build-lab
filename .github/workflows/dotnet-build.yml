@@ -129,6 +129,7 @@ jobs:
           --no-restore
           --output publish/linux-build-lab-camera
           -p:Version=${{ env.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }}
           -p:ContinuousIntegrationBuild=true
 
       - name: Create camera Debian package
@@ -156,7 +157,7 @@ jobs:
           retention-days: 14
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             publish/LinuxBuildLab.Sample-linux-x64.zip

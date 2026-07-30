@@ -83,7 +83,7 @@ variable "github_repository" {
 variable "package_version" {
   description = "Version of the deb package downloaded from GitHub Release"
   type        = string
-  default     = "0.3.0"
+  default     = "0.3.1"
 
   validation {
     condition = can(
