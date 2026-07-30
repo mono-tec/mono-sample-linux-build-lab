@@ -49,34 +49,37 @@ Get-Content $env:USERPROFILE\.ssh\mono-linux-build-lab.pub
 
 秘密鍵はWindows端末内で管理し、Gitへ登録しないでください。
 
-## 2. SSH鍵の作成
+## 2. Linux側の準備
 
-Windows PowerShellで実行します。
+### 2.1 リポジトリの取得
 
-```powershell
-ssh-keygen `
-  -t ed25519 `
-  -f $env:USERPROFILE\.ssh\mono-linux-build-lab `
-  -C mono-linux-build-lab
+Ubuntuホストで実行します。
+
+```bash
+cd ~
+git clone https://github.com/mono-tec/mono-sample-linux-build-lab.git
+cd mono-sample-linux-build-lab/infra/incus-dotnet10-deb
 ```
 
-公開鍵を確認します。
+すでに取得済みの場合は、リポジトリを更新します。
 
-```powershell
-Get-Content $env:USERPROFILE\.ssh\mono-linux-build-lab.pub
+```bash
+cd ~/mono-sample-linux-build-lab
+git pull
+cd infra/incus-dotnet10-deb
 ```
 
-秘密鍵はWindows端末内で管理し、Gitへ登録しないでください。
+### 2.2 設定生成スクリプトの準備
 
-## 3. terraform.tfvarsの作成
-
-Ubuntuホストで、設定生成スクリプトへ実行権限を付与します。
+実行権限を付与します。
 
 ```bash
 chmod +x scripts/create-terraform-tfvars.sh
 ```
 
-スクリプトを実行します。
+## 3. terraform.tfvarsの作成
+
+設定生成スクリプトを実行します。
 
 ```bash
 ./scripts/create-terraform-tfvars.sh

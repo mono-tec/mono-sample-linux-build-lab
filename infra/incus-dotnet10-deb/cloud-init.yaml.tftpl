@@ -51,9 +51,9 @@ write_files:
       #!/usr/bin/env bash
       set -euo pipefail
 
-      PACKAGE_NAME="linux-build-lab-sample"
-      RELEASE_TAG="${release_version}"
-      PACKAGE_VERSION="$${RELEASE_TAG#v}"
+      PACKAGE_NAME="${package_name}"
+      PACKAGE_VERSION="${package_version}"
+      RELEASE_TAG="v$${PACKAGE_VERSION}"
       PACKAGE_FILE="$${PACKAGE_NAME}_$${PACKAGE_VERSION}_amd64.deb"
       DOWNLOAD_FILE="/tmp/$${PACKAGE_FILE}"
       DOWNLOAD_URL="https://github.com/${github_repository}/releases/download/$${RELEASE_TAG}/$${PACKAGE_FILE}"
