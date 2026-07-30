@@ -277,7 +277,7 @@ read -r -p \
 package_version="${package_version:-${DEFAULT_PACKAGE_VERSION}}"
 
 if [[ ! "${package_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-  echo "[ERROR] パッケージバージョンは0.3.0のような形式で入力してください。"
+  echo "[ERROR] パッケージバージョンはX.Y.Z形式で入力してください。例: 0.3.1"
   exit 1
 fi
 

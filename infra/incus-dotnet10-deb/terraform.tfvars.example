@@ -85,3 +85,22 @@ guest_ipv4_prefix  = 24
 #
 # 秘密鍵の内容は絶対に貼り付けないでください。
 ssh_public_key = "ssh-ed25519 AAAA... mono-linux-build-lab"
+
+# ------------------------------------------------------------
+# GitHub Release / debパッケージ設定
+# ------------------------------------------------------------
+
+# debパッケージを取得するGitHub Repositoryです。
+github_repository = "mono-tec/mono-sample-linux-build-lab"
+
+# GitHub Releaseから取得するdebパッケージ名です。
+package_name = "linux-build-lab-sample"
+
+# 取得するdebパッケージのバージョンです。
+# GitHub Releaseのタグでは先頭にvが付きますが、
+# ここではvを付けずに指定します。
+#
+# 例:
+#   package_version = "0.3.1"
+#   GitHub Releaseタグ = "v0.3.1"
+package_version = "0.3.1"
