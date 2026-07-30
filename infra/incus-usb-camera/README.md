@@ -1,4 +1,4 @@
-# Incus .NET 10 debパッケージ実行環境
+# Incus USBカメラ実行環境
 
 OpenTofuとIncusを使用して、Ubuntu 24.04コンテナを作成します。
 
@@ -7,12 +7,14 @@ OpenTofuとIncusを使用して、Ubuntu 24.04コンテナを作成します。
 - Incusコンテナの作成
 - LAN側macvlanインターフェースの追加
 - DHCPまたは固定IPv4アドレスの設定
+- UbuntuホストのUSBカメラをコンテナへ割り当て
 - .NET 10 Runtimeのインストール
 - OpenSSH Serverのインストール
 - SSH公開鍵の登録
-- GitHub Releaseからdebパッケージを取得
+- GitHub Releaseからカメラ用debパッケージを取得
 - debパッケージのインストール
-- systemdのoneshotサービスによる検証用アプリの実行
+- systemdのoneshotサービスによる静止画撮影
+- JPEGファイルの保存
 
 ## 1. Windows側の準備
 
@@ -51,35 +53,43 @@ Get-Content $env:USERPROFILE\.ssh\mono-linux-build-lab.pub
 
 ## 2. Linux側の準備
 
-### 2.1 リポジトリの取得
+### 2.1 USBカメラの接続確認
+
+UbuntuホストへUSBカメラを接続します。
+
+```bash
+lsusb
+ls -l /dev/video*
+ls -l /dev/v4l/by-id/
+```
+
+本サンプルでは、映像取得用デバイスとして`/dev/video0`を使用します。
+
+### 2.2 リポジトリの取得
 
 Ubuntuホストで実行します。
 
 ```bash
 cd ~
 git clone https://github.com/mono-tec/mono-sample-linux-build-lab.git
-cd mono-sample-linux-build-lab/infra/incus-dotnet10-deb
+cd mono-sample-linux-build-lab/infra/incus-usb-camera
 ```
 
-すでに取得済みの場合は、リポジトリを更新します。
+すでに取得済みの場合は更新します。
 
 ```bash
 cd ~/mono-sample-linux-build-lab
 git pull
-cd infra/incus-dotnet10-deb
+cd infra/incus-usb-camera
 ```
 
-### 2.2 設定生成スクリプトの準備
-
-実行権限を付与します。
+### 2.3 設定生成スクリプトの準備
 
 ```bash
 chmod +x scripts/create-terraform-tfvars.sh
 ```
 
 ## 3. terraform.tfvarsの作成
-
-設定生成スクリプトを実行します。
 
 ```bash
 ./scripts/create-terraform-tfvars.sh
@@ -91,7 +101,12 @@ chmod +x scripts/create-terraform-tfvars.sh
 - IPv4設定方式（DHCPまたは固定IP）
 - 固定IPv4アドレスとプレフィックス長
 - Windows側で作成したSSH公開鍵
+- Ubuntuホスト側のカメラデバイス
+- コンテナ内のカメラデバイス
+- `video`グループのGID
+- カメラデバイスのアクセス権限
 - debパッケージを取得するGitHub Releaseのバージョン
+- 取得するdebパッケージ名
 
 生成結果を確認します。
 
@@ -105,19 +120,20 @@ cat terraform.tfvars
 
 ```bash
 tofu init
-```
-
-構成を整形・検証します。
-
-```bash
 tofu fmt
 tofu validate
+tofu plan
 ```
 
-実行内容を確認します。
+`plan`では、USBカメラのデバイス設定が含まれていることを確認します。
 
-```bash
-tofu plan
+```text
+camera0
+type   = unix-char
+source = /dev/video0
+path   = /dev/video0
+gid    = 44
+mode   = 0660
 ```
 
 ## 5. コンテナの作成
@@ -126,18 +142,12 @@ tofu plan
 tofu apply
 ```
 
-確認メッセージが表示されたら、次を入力します。
-
-```text
-yes
-```
+確認メッセージが表示されたら、`yes`を入力します。
 
 ## 6. Cloud-initの完了確認
 
-Ubuntuホストで、Cloud-initの完了を待ちます。
-
 ```bash
-incus exec ubuntu2404-dotnet10-deb -- \
+incus exec ubuntu2404-usb-camera -- \
   cloud-init status --wait
 ```
 
@@ -147,23 +157,137 @@ incus exec ubuntu2404-dotnet10-deb -- \
 status: done
 ```
 
-コンテナのネットワーク設定を確認します。
+ネットワーク設定を確認します。
 
 ```bash
-incus exec ubuntu2404-dotnet10-deb -- \
+incus exec ubuntu2404-usb-camera -- \
   ip -br address
 ```
 
 `eth1`に設定されたIPv4アドレスを確認してください。
 
-Cloud-initの処理でエラーが発生した場合は、次のログを確認します。
+Cloud-init全体のログを確認します。
 
 ```bash
-incus exec ubuntu2404-dotnet10-deb -- \
+incus exec ubuntu2404-usb-camera -- \
   cat /var/log/cloud-init-output.log
 ```
 
-## 7. WindowsからSSH接続
+カメラ用debパッケージの取得・インストールログを確認します。
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  cat /var/log/linux-build-lab-camera-install.log
+```
+
+## 7. Ubuntuホストから自動構築結果を確認
+
+### 7.1 USBカメラデバイス
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  ls -l /dev/video0
+```
+
+次のように、所有グループが`video`になっていることを確認します。
+
+```text
+crw-rw---- 1 root video ... /dev/video0
+```
+
+### 7.2 ubuntuユーザーのグループ
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  id ubuntu
+```
+
+`video`グループが含まれていることを確認します。
+
+```text
+groups=...,44(video)
+```
+
+### 7.3 debパッケージ
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  dpkg -l | grep linux-build-lab-camera
+```
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  dpkg -L linux-build-lab-camera
+```
+
+### 7.4 systemdサービス
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  systemctl status \
+    linux-build-lab-camera.service \
+    --no-pager
+```
+
+正常に実行された場合は、次のような状態になります。
+
+```text
+Active: active (exited)
+```
+
+登録されたUnitファイルを確認します。
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  systemctl cat linux-build-lab-camera.service
+```
+
+次の設定が含まれていることを確認します。
+
+```ini
+User=ubuntu
+Group=ubuntu
+SupplementaryGroups=video
+StateDirectory=linux-build-lab-camera
+```
+
+### 7.5 実行ログ
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  journalctl \
+    -u linux-build-lab-camera.service \
+    --no-pager
+```
+
+次のような出力が確認できれば成功です。
+
+```text
+Linux Build Lab Camera Sample
+Device   : /dev/video0
+Output   : /var/lib/linux-build-lab-camera/capture.jpg
+[SUCCESS] JPEGファイルを作成しました。
+```
+
+### 7.6 撮影画像
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  ls -lh /var/lib/linux-build-lab-camera/capture.jpg
+```
+
+```bash
+incus exec ubuntu2404-usb-camera -- \
+  file /var/lib/linux-build-lab-camera/capture.jpg
+```
+
+正常な場合は、次のように表示されます。
+
+```text
+JPEG image data
+```
+
+## 8. WindowsからSSH接続
 
 Windows PowerShellから、`eth1`に設定されたIPv4アドレスを指定して接続します。
 
@@ -182,50 +306,38 @@ Are you sure you want to continue connecting (yes/no/[fingerprint])?
 
 接続先が正しいことを確認して、`yes`を入力します。
 
-## 8. Windowsから動作確認
+## 9. Windowsから動作確認
 
 以降のコマンドは、WindowsからSSH接続したコンテナ内で実行します。
 
-### 8.1 OSと.NET Runtime
+### 9.1 OSと.NET Runtime
 
 ```bash
 cat /etc/os-release
 dotnet --info
 ```
 
-### 8.2 debパッケージ
-
-インストール状態を確認します。
+### 9.2 USBカメラとユーザー権限
 
 ```bash
-dpkg -l | grep linux-build-lab
+ls -l /dev/video0
+id
 ```
 
-パッケージによって配置されたファイルを確認します。
+`/dev/video0`の所有グループが`video`であり、ログインユーザーが`video`グループへ所属していることを確認します。
+
+### 9.3 debパッケージ
 
 ```bash
-dpkg -L linux-build-lab-sample
+dpkg -l | grep linux-build-lab-camera
+dpkg -L linux-build-lab-camera
 ```
 
-### 8.3 systemd Unit
-
-登録されたUnitファイルを確認します。
+### 9.4 systemd Unit
 
 ```bash
-sudo systemctl cat linux-build-lab-sample.service
-```
-
-検証用アプリが、`ubuntu`ユーザーで実行される設定になっていることを確認します。
-
-```ini
-User=ubuntu
-Group=ubuntu
-```
-
-サービスの有効化状態を確認します。
-
-```bash
-sudo systemctl is-enabled linux-build-lab-sample.service
+sudo systemctl cat linux-build-lab-camera.service
+sudo systemctl is-enabled linux-build-lab-camera.service
 ```
 
 今回の構成では、Cloud-initから1回だけ起動し、OS起動時の自動実行は有効化していないため、次の表示になります。
@@ -238,72 +350,81 @@ disabled
 
 ```bash
 sudo systemctl status \
-  linux-build-lab-sample.service \
+  linux-build-lab-camera.service \
   --no-pager
 ```
 
-正常に実行された場合は、次のような状態になります。
-
-```text
-Active: active (exited)
-```
-
-### 8.4 アプリの実行ログ
-
-systemdのJournalへ記録された実行結果を確認します。
+### 9.5 実行ログ
 
 ```bash
 sudo journalctl \
-  -u linux-build-lab-sample.service \
+  -u linux-build-lab-camera.service \
   --no-pager
 ```
 
-次のような.NETアプリの出力が確認できれば成功です。
-
-```text
-Linux Build Lab Sample
-OS       : Ubuntu 24.04
-Architecture: X64
-.NET     : .NET 10
-Hello from .NET 10 on Linux!
-```
-
-### 8.5 debパッケージのインストールログ
-
-GitHub Releaseからの取得と、debパッケージのインストール処理を確認します。
+### 9.6 撮影画像
 
 ```bash
-sudo cat /var/log/linux-build-lab-install.log
+ls -lh /var/lib/linux-build-lab-camera/capture.jpg
+file /var/lib/linux-build-lab-camera/capture.jpg
+```
+
+## 10. 再撮影
+
+oneshotサービスを再実行する場合は、いったん停止してから起動します。
+
+```bash
+sudo systemctl stop linux-build-lab-camera.service
+sudo systemctl start linux-build-lab-camera.service
+```
+
+ログと撮影時刻を確認します。
+
+```bash
+sudo journalctl \
+  -u linux-build-lab-camera.service \
+  --no-pager
+
+ls -lh \
+  --time-style=long-iso \
+  /var/lib/linux-build-lab-camera/capture.jpg
 ```
 
 ## 実行の流れ
 
 ```text
 Ubuntuホスト
+  ├─ USBカメラを接続
   ├─ tofu apply
+  ├─ Incusコンテナを作成
+  ├─ /dev/video0をコンテナへ割り当て
   ├─ Cloud-init完了確認
   └─ eth1のIPアドレス確認
 
+Cloud-init
+  ├─ .NET 10 Runtimeを導入
+  ├─ OpenSSH Serverを導入
+  ├─ ubuntuユーザーをvideoグループへ追加
+  ├─ カメラ用debパッケージを取得
+  ├─ debパッケージをインストール
+  └─ systemd oneshotで静止画を撮影
+
 Windows
   ├─ SSH接続
+  ├─ USBカメラの権限確認
   ├─ debパッケージ確認
   ├─ systemd Unit確認
-  └─ journalctlで実行結果確認
+  ├─ Journal確認
+  └─ JPEGファイル確認
 ```
 
-## 9. コンテナの削除
-
-Ubuntuホストで実行します。
+## 11. コンテナの削除
 
 ```bash
 tofu destroy
 ```
 
-確認メッセージが表示されたら、次を入力します。
-
-```text
-yes
-```
+確認メッセージが表示されたら、`yes`を入力します。
 
 ## 再作成時の手順
 
@@ -314,9 +435,7 @@ tofu destroy
 tofu apply
 ```
 
-Cloud-initは基本的にインスタンスの初回起動時に実行されます。
-
-既存コンテナのuser-dataを変更しただけでは、`write_files`や`runcmd`が再実行されない場合があります。
+Cloud-initは基本的にインスタンスの初回起動時に実行されます。既存コンテナのuser-dataを変更しただけでは、`write_files`や`runcmd`が再実行されない場合があります。
 
 ## Gitへ登録するファイル
 
