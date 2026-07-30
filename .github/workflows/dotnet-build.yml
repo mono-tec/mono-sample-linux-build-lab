@@ -10,10 +10,14 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build and release Linux x64 application
+    name: Build and release Linux x64 applications
     runs-on: ubuntu-latest
 
     steps:
+      # ============================================================
+      # 共通準備
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -25,6 +29,8 @@ jobs:
       - name: Display .NET information
         run: dotnet --info
 
+      # Gitタグの先頭にあるvを除去し、
+      # debパッケージと.NETアプリのバージョンに使用します。
       - name: Set version from Git tag
         shell: bash
         run: |
@@ -38,13 +44,23 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Version: $VERSION"
 
-      - name: Restore dependencies
+      # debパッケージの作成に使用します。
+      - name: Install Debian package tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+
+      # ============================================================
+      # LinuxBuildLab.Sample
+      # ============================================================
+
+      - name: Restore sample dependencies
         run: >
           dotnet restore
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
           --runtime linux-x64
 
-      - name: Build
+      - name: Build sample application
         run: >
           dotnet build
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
@@ -54,7 +70,7 @@ jobs:
           -p:Version=${{ env.VERSION }}
           -p:ContinuousIntegrationBuild=true
 
-      - name: Publish for Linux x64
+      - name: Publish sample application
         run: >
           dotnet publish
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
@@ -62,35 +78,80 @@ jobs:
           --runtime linux-x64
           --self-contained false
           --no-restore
-          --output publish/linux-x64
+          --output publish/linux-build-lab-sample
           -p:Version=${{ env.VERSION }}
           -p:ContinuousIntegrationBuild=true
 
-      - name: Create ZIP archive
+      # 前章との互換性を残すため、
+      # sampleアプリはZIP形式でも配布します。
+      - name: Create sample ZIP archive
         shell: bash
         run: |
-          cd publish/linux-x64
+          cd publish/linux-build-lab-sample
           zip -r ../LinuxBuildLab.Sample-linux-x64.zip .
 
-      - name: Install Debian package tools
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
-
-      - name: Create Debian package
+      - name: Create sample Debian package
         shell: bash
         run: |
-          chmod +x packaging/deb/build-deb.sh
+          chmod +x packaging/sample-deb/build-deb.sh
 
           PACKAGE_VERSION="${VERSION}" \
-          PUBLISH_DIR="${GITHUB_WORKSPACE}/publish/linux-x64" \
-          ./packaging/deb/build-deb.sh
+          PUBLISH_DIR="${GITHUB_WORKSPACE}/publish/linux-build-lab-sample" \
+          ./packaging/sample-deb/build-deb.sh
+
+      # ============================================================
+      # LinuxBuildLab.Camera
+      # ============================================================
+
+      - name: Restore camera dependencies
+        run: >
+          dotnet restore
+          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
+          --runtime linux-x64
+
+      - name: Build camera application
+        run: >
+          dotnet build
+          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
+          --configuration Release
+          --runtime linux-x64
+          --no-restore
+          -p:Version=${{ env.VERSION }}
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Publish camera application
+        run: >
+          dotnet publish
+          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
+          --configuration Release
+          --runtime linux-x64
+          --self-contained false
+          --no-restore
+          --output publish/linux-build-lab-camera
+          -p:Version=${{ env.VERSION }}
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Create camera Debian package
+        shell: bash
+        run: |
+          chmod +x packaging/camera-deb/build-deb.sh
+
+          PACKAGE_VERSION="${VERSION}" \
+          PUBLISH_DIR="${GITHUB_WORKSPACE}/publish/linux-build-lab-camera" \
+          ./packaging/camera-deb/build-deb.sh
+
+      # ============================================================
+      # 成果物の登録
+      # ============================================================
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: LinuxBuildLab.Sample-linux-x64
+          name: LinuxBuildLab-linux-x64
           path: |
             publish/LinuxBuildLab.Sample-linux-x64.zip
             artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
+            artifacts/packages/linux-build-lab-camera_${{ env.VERSION }}_amd64.deb
           if-no-files-found: error
           retention-days: 14
 
@@ -100,4 +161,5 @@ jobs:
           files: |
             publish/LinuxBuildLab.Sample-linux-x64.zip
             artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
+            artifacts/packages/linux-build-lab-camera_${{ env.VERSION }}_amd64.deb
           generate_release_notes: true

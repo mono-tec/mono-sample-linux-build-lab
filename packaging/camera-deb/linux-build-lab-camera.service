@@ -1,0 +1,15 @@
+[Unit]
+Description=Linux Build Lab USB camera capture
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/linux-build-lab-camera
+User=ubuntu
+Group=ubuntu
+SupplementaryGroups=video
+StateDirectory=linux-build-lab-camera
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
