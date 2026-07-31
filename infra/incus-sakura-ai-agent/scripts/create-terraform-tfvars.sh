@@ -21,7 +21,7 @@ DEFAULT_GUEST_INTERFACE_NAME="eth1"
 DEFAULT_IPV4_PREFIX="24"
 
 DEFAULT_SAKURA_AI_BASE_URL="https://api.ai.sakura.ad.jp/v1"
-DEFAULT_SAKURA_AI_MODEL="gpt-oss-120b"
+DEFAULT_SAKURA_AI_MODEL="preview/Kimi-K2.7-Code"
 DEFAULT_WORKSPACE_DIRECTORY="/home/ubuntu/workspace"
 
 # ============================================================
@@ -208,9 +208,7 @@ while true; do
           "IPv4プレフィックス長 [${DEFAULT_IPV4_PREFIX}]: " \
           guest_ipv4_prefix
 
-        guest_ipv4_prefix="${
-          guest_ipv4_prefix:-${DEFAULT_IPV4_PREFIX}
-        }"
+        guest_ipv4_prefix="${guest_ipv4_prefix:-${DEFAULT_IPV4_PREFIX}}"
 
         if validate_ipv4_prefix "${guest_ipv4_prefix}"; then
           break
@@ -259,9 +257,7 @@ read -r -p \
   "さくらのAI Engine Base URL [${DEFAULT_SAKURA_AI_BASE_URL}]: " \
   sakura_ai_base_url
 
-sakura_ai_base_url="${
-  sakura_ai_base_url:-${DEFAULT_SAKURA_AI_BASE_URL}
-}"
+sakura_ai_base_url="${sakura_ai_base_url:-${DEFAULT_SAKURA_AI_BASE_URL}}"
 
 if [[ ! "${sakura_ai_base_url}" =~ ^https:// ]]; then
   echo "[ERROR] Base URLはhttps://から始まる必要があります。"
@@ -283,8 +279,10 @@ fi
 echo
 echo "使用するモデルを選択してください。"
 echo
-echo "  1: gpt-oss-120b"
-echo "  2: llm-jp-3.1-8x13b-instruct4"
+echo "  1: preview/Kimi-K2.7-Code"
+echo "  2: gpt-oss-120b"
+echo "  3: llm-jp-3.1-8x13b-instruct4"
+echo "  4: preview/Kimi-K2.6"
 echo
 
 while true; do
@@ -294,21 +292,30 @@ while true; do
 
   case "${model_selection}" in
     1)
-      sakura_ai_model="gpt-oss-120b"
+      sakura_ai_model="preview/Kimi-K2.7-Code"
       break
       ;;
 
     2)
+      sakura_ai_model="gpt-oss-120b"
+      break
+      ;;
+
+    3)
       sakura_ai_model="llm-jp-3.1-8x13b-instruct4"
       break
       ;;
 
+    4)
+      sakura_ai_model="preview/Kimi-K2.6"
+      break
+      ;;
+
     *)
-      echo "[ERROR] 1または2を入力してください。"
+      echo "[ERROR] 1から4のいずれかを入力してください。"
       ;;
   esac
 done
-
 # ============================================================
 # OpenCode作業ディレクトリ
 # ============================================================
@@ -318,9 +325,7 @@ read -r -p \
   "OpenCode作業ディレクトリ [${DEFAULT_WORKSPACE_DIRECTORY}]: " \
   workspace_directory
 
-workspace_directory="${
-  workspace_directory:-${DEFAULT_WORKSPACE_DIRECTORY}
-}"
+workspace_directory="${workspace_directory:-${DEFAULT_WORKSPACE_DIRECTORY}}"
 
 if [[ ! "${workspace_directory}" == /home/ubuntu/* ]]; then
   echo "[ERROR] 作業ディレクトリは/home/ubuntu配下にしてください。"
