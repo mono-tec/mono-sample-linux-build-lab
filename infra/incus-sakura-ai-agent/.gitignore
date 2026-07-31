@@ -1,0 +1,7 @@
+jyaa.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+.terraform.tfstate.lock.info

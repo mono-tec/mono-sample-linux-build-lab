@@ -5,3 +5,7 @@ crash.log
 crash.*.log
 *.tfplan
 .terraform.tfstate.lock.info
+
+# Environment-specific settings and secrets
+*.tfvars
+!terraform.tfvars.example

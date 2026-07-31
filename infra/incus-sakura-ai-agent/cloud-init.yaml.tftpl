@@ -1,0 +1,215 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+  - openssh-server
+
+users:
+  - name: ubuntu
+    gecos: Ubuntu
+    groups:
+      - adm
+      - sudo
+    shell: /bin/bash
+    sudo:
+      - ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+ssh_pwauth: false
+disable_root: true
+
+write_files:
+  # ----------------------------------------------------------
+  # macvlan側ネットワーク設定
+  # ----------------------------------------------------------
+  - path: /etc/netplan/60-sakura-ai-agent.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      network:
+        version: 2
+        ethernets:
+          ${guest_interface_name}:
+%{ if network_mode == "dhcp" ~}
+            dhcp4: true
+%{ else ~}
+            dhcp4: false
+            addresses:
+              - ${guest_ipv4_address}/${guest_ipv4_prefix}
+%{ endif ~}
+            dhcp6: false
+            optional: true
+
+  # ----------------------------------------------------------
+  # OpenCodeセットアップスクリプト
+  # ----------------------------------------------------------
+  - path: /usr/local/bin/install-opencode.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+
+      set -euo pipefail
+
+      readonly USER_NAME="ubuntu"
+      readonly USER_HOME="/home/ubuntu"
+      readonly LOG_FILE="/var/log/opencode-install.log"
+
+      readonly OPENCODE_CONFIG_DIRECTORY="$${USER_HOME}/.config/opencode"
+      readonly OPENCODE_CONFIG_FILE="$${OPENCODE_CONFIG_DIRECTORY}/opencode.json"
+      readonly WORKSPACE_DIRECTORY="${workspace_directory}"
+
+      exec > >(tee -a "$${LOG_FILE}") 2>&1
+
+      echo "[INFO] OpenCode setup started."
+
+      # ------------------------------------------------------
+      # OpenCodeのインストール
+      # ------------------------------------------------------
+      echo "[INFO] Installing OpenCode."
+
+      runuser -u "$${USER_NAME}" -- \
+        env HOME="$${USER_HOME}" \
+        bash -lc \
+        'curl -fsSL https://opencode.ai/install | bash'
+
+      readonly OPENCODE_BINARY="$${USER_HOME}/.opencode/bin/opencode"
+
+      if [[ ! -x "$${OPENCODE_BINARY}" ]]; then
+        echo "[ERROR] OpenCode binary was not found."
+        echo "[ERROR] Expected path: $${OPENCODE_BINARY}"
+        exit 1
+      fi
+
+      # SSH接続後もパスを意識せずopencodeを実行できるようにする
+      ln -sfn "$${OPENCODE_BINARY}" /usr/local/bin/opencode
+
+      # ubuntuユーザーのPATHにも追加する
+      if ! grep -Fq '.opencode/bin' "$${USER_HOME}/.profile"; then
+        cat >> "$${USER_HOME}/.profile" <<'EOF'
+
+      # OpenCode
+      if [ -d "$HOME/.opencode/bin" ]; then
+        PATH="$HOME/.opencode/bin:$PATH"
+      fi
+      EOF
+      fi
+
+      # ------------------------------------------------------
+      # OpenCode設定ディレクトリの作成
+      # ------------------------------------------------------
+      echo "[INFO] Creating OpenCode configuration."
+
+      install \
+        -d \
+        -m 0700 \
+        -o "$${USER_NAME}" \
+        -g "$${USER_NAME}" \
+        "$${OPENCODE_CONFIG_DIRECTORY}"
+
+      # OpenTofuから渡されたBase64形式のトークンを復元する
+      SAKURA_AI_TOKEN="$(
+        printf '%s' '${sakura_ai_token_base64}' |
+          base64 --decode
+      )"
+
+      if [[ -z "$${SAKURA_AI_TOKEN}" ]]; then
+        echo "[ERROR] Sakura AI Engine token is empty."
+        exit 1
+      fi
+
+      # jqを使用し、JSONとして安全な形式で設定を生成する
+      jq \
+        --null-input \
+        --arg base_url "${sakura_ai_base_url}" \
+        --arg api_key "$${SAKURA_AI_TOKEN}" \
+        --arg model "${sakura_ai_model}" \
+        '{
+          "$schema": "https://opencode.ai/config.json",
+          "model": ("sakura/" + $model),
+          "provider": {
+            "sakura": {
+              "npm": "@ai-sdk/openai-compatible",
+              "name": "Sakura AI Engine",
+              "options": {
+                "baseURL": $base_url,
+                "apiKey": $api_key
+              },
+              "models": {
+                ($model): {
+                  "name": $model
+                }
+              }
+            }
+          }
+        }' > "$${OPENCODE_CONFIG_FILE}"
+
+      chown \
+        "$${USER_NAME}:$${USER_NAME}" \
+        "$${OPENCODE_CONFIG_FILE}"
+
+      chmod 0600 "$${OPENCODE_CONFIG_FILE}"
+
+      unset SAKURA_AI_TOKEN
+
+      # ------------------------------------------------------
+      # 作業ディレクトリの作成
+      # ------------------------------------------------------
+      echo "[INFO] Creating workspace directory."
+
+      install \
+        -d \
+        -m 0755 \
+        -o "$${USER_NAME}" \
+        -g "$${USER_NAME}" \
+        "$${WORKSPACE_DIRECTORY}"
+
+      # ------------------------------------------------------
+      # インストール確認
+      # ------------------------------------------------------
+      echo "[INFO] Checking OpenCode installation."
+
+      runuser -u "$${USER_NAME}" -- \
+        env HOME="$${USER_HOME}" \
+        "$${OPENCODE_BINARY}" --version
+
+      echo "[INFO] Configured model: ${sakura_ai_model}"
+      echo "[INFO] Workspace: $${WORKSPACE_DIRECTORY}"
+      echo "[INFO] OpenCode setup completed."
+
+runcmd:
+  # ----------------------------------------------------------
+  # SSH設定
+  # ----------------------------------------------------------
+  - systemctl enable --now ssh
+
+  # ----------------------------------------------------------
+  # LAN側NIC設定
+  # ----------------------------------------------------------
+  - netplan generate
+  - netplan apply
+
+  # ----------------------------------------------------------
+  # OpenCodeとさくらのAI Engine設定
+  # ----------------------------------------------------------
+  - /usr/local/bin/install-opencode.sh
+
+final_message: |
+  Linux Build Lab AI agent environment is ready.
+
+  OpenCode:
+    /usr/local/bin/opencode
+
+  Workspace:
+    ${workspace_directory}
+
+  Installation log:
+    /var/log/opencode-install.log
