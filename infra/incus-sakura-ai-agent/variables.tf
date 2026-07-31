@@ -139,18 +139,20 @@ variable "sakura_ai_token" {
 variable "sakura_ai_model" {
   description = "Sakura AI Engine model used by OpenCode"
   type        = string
-  default     = "gpt-oss-120b"
+  default     = "preview/Kimi-K2.7-Code"
 
   validation {
     condition = contains(
       [
+        "preview/Kimi-K2.7-Code",
         "gpt-oss-120b",
-        "llm-jp-3.1-8x13b-instruct4"
+        "llm-jp-3.1-8x13b-instruct4",
+        "preview/Kimi-K2.6"
       ],
       var.sakura_ai_model
     )
 
-    error_message = "sakura_ai_model must be gpt-oss-120b or llm-jp-3.1-8x13b-instruct4."
+    error_message = "sakura_ai_model must be one of the supported Sakura AI Engine models."
   }
 }
 
