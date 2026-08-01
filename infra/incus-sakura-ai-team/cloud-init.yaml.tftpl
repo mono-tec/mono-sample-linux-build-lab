@@ -1,0 +1,258 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+
+users:
+  - name: ubuntu
+    gecos: Ubuntu
+    groups:
+      - adm
+      - sudo
+    shell: /bin/bash
+    sudo:
+      - ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+
+ssh_pwauth: false
+disable_root: true
+
+write_files:
+  - path: /usr/local/bin/install-opencode.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+
+      set -euo pipefail
+
+      readonly USER_NAME="ubuntu"
+      readonly USER_HOME="/home/ubuntu"
+      readonly LOG_FILE="/var/log/opencode-install.log"
+
+      readonly AGENT_ROLE="${agent_role}"
+      readonly AGENT_METADATA_DIRECTORY="/etc/ai-agent"
+
+      readonly OPENCODE_CONFIG_DIRECTORY="$${USER_HOME}/.config/opencode"
+      readonly OPENCODE_CONFIG_FILE="$${OPENCODE_CONFIG_DIRECTORY}/opencode.json"
+      readonly WORKSPACE_DIRECTORY="${workspace_directory}"
+
+      exec > >(tee -a "$${LOG_FILE}") 2>&1
+
+      echo "[INFO] OpenCode setup started."
+      echo "[INFO] Agent role: $${AGENT_ROLE}"
+
+      # ------------------------------------------------------
+      # OpenCodeのインストール
+      # ------------------------------------------------------
+      echo "[INFO] Installing OpenCode."
+
+      runuser -u "$${USER_NAME}" -- \
+        env HOME="$${USER_HOME}" \
+        bash -lc \
+        'curl -fsSL https://opencode.ai/install | bash'
+
+      readonly OPENCODE_BINARY="$${USER_HOME}/.opencode/bin/opencode"
+
+      if [[ ! -x "$${OPENCODE_BINARY}" ]]; then
+        echo "[ERROR] OpenCode binary was not found."
+        echo "[ERROR] Expected path: $${OPENCODE_BINARY}"
+        exit 1
+      fi
+
+      ln -sfn "$${OPENCODE_BINARY}" /usr/local/bin/opencode
+
+      if ! grep -Fq '.opencode/bin' "$${USER_HOME}/.profile"; then
+        cat >> "$${USER_HOME}/.profile" <<'EOF'
+
+      # OpenCode
+      if [ -d "$HOME/.opencode/bin" ]; then
+        PATH="$HOME/.opencode/bin:$PATH"
+      fi
+      EOF
+      fi
+
+      # ------------------------------------------------------
+      # OpenCode設定の作成
+      # ------------------------------------------------------
+      echo "[INFO] Creating OpenCode configuration."
+
+      install \
+        -d \
+        -m 0700 \
+        -o "$${USER_NAME}" \
+        -g "$${USER_NAME}" \
+        "$${OPENCODE_CONFIG_DIRECTORY}"
+
+      SAKURA_AI_TOKEN="$(
+        printf '%s' '${sakura_ai_token_base64}' |
+          base64 --decode
+      )"
+
+      if [[ -z "$${SAKURA_AI_TOKEN}" ]]; then
+        echo "[ERROR] Sakura AI Engine token is empty."
+        exit 1
+      fi
+
+      jq \
+        --null-input \
+        --arg base_url "${sakura_ai_base_url}" \
+        --arg api_key "$${SAKURA_AI_TOKEN}" \
+        --arg model "${sakura_ai_model}" \
+        '{
+          "$schema": "https://opencode.ai/config.json",
+          "model": ("sakura/" + $model),
+          "provider": {
+            "sakura": {
+              "npm": "@ai-sdk/openai-compatible",
+              "name": "Sakura AI Engine",
+              "options": {
+                "baseURL": $base_url,
+                "apiKey": $api_key
+              },
+              "models": {
+                ($model): {
+                  "name": $model
+                }
+              }
+            }
+          }
+        }' > "$${OPENCODE_CONFIG_FILE}"
+
+      chown \
+        "$${USER_NAME}:$${USER_NAME}" \
+        "$${OPENCODE_CONFIG_FILE}"
+
+      chmod 0600 "$${OPENCODE_CONFIG_FILE}"
+
+      unset SAKURA_AI_TOKEN
+
+      # ------------------------------------------------------
+      # エージェント固有情報の作成
+      # ------------------------------------------------------
+      echo "[INFO] Creating agent metadata."
+
+      install \
+        -d \
+        -m 0755 \
+        "$${AGENT_METADATA_DIRECTORY}"
+
+      printf '%s\n' "$${AGENT_ROLE}" \
+        > "$${AGENT_METADATA_DIRECTORY}/role"
+
+      chmod 0644 \
+        "$${AGENT_METADATA_DIRECTORY}/role"
+
+      # ------------------------------------------------------
+      # 共有ワークスペースの確認
+      # ------------------------------------------------------
+      echo "[INFO] Checking workspace directory."
+
+      if [[ ! -d "$${WORKSPACE_DIRECTORY}" ]]; then
+        echo "[ERROR] Workspace directory was not found."
+        echo "[ERROR] Expected path: $${WORKSPACE_DIRECTORY}"
+        exit 1
+      fi
+
+      if ! runuser -u "$${USER_NAME}" -- \
+        test -w "$${WORKSPACE_DIRECTORY}"; then
+        echo "[ERROR] Workspace directory is not writable."
+        echo "[ERROR] User: $${USER_NAME}"
+        echo "[ERROR] Path: $${WORKSPACE_DIRECTORY}"
+        exit 1
+      fi
+
+      echo "[INFO] Workspace directory is writable."
+
+      # ------------------------------------------------------
+      # インストール確認
+      # ------------------------------------------------------
+      echo "[INFO] Checking OpenCode installation."
+
+      runuser -u "$${USER_NAME}" -- \
+        env HOME="$${USER_HOME}" \
+        "$${OPENCODE_BINARY}" --version
+
+      echo "[INFO] Agent role: $${AGENT_ROLE}"
+      echo "[INFO] Configured model: ${sakura_ai_model}"
+      echo "[INFO] Workspace: $${WORKSPACE_DIRECTORY}"
+      echo "[INFO] OpenCode setup completed."
+
+%{ if install_dotnet_sdk ~}
+  # ----------------------------------------------------------
+  # .NET 10 SDKセットアップスクリプト
+  # ----------------------------------------------------------
+  - path: /usr/local/bin/install-dotnet10.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+
+      set -euo pipefail
+
+      readonly LOG_FILE="/var/log/dotnet10-install.log"
+
+      exec > >(tee -a "$${LOG_FILE}") 2>&1
+
+      echo "[INFO] .NET 10 SDK setup started."
+
+      export DEBIAN_FRONTEND=noninteractive
+
+      apt-get update
+
+      apt-get install -y \
+        dotnet-sdk-10.0
+
+      if ! command -v dotnet >/dev/null 2>&1; then
+        echo "[ERROR] dotnet command was not found."
+        exit 1
+      fi
+
+      echo "[INFO] Checking .NET installation."
+
+      dotnet --info
+
+      echo "[INFO] .NET 10 SDK setup completed."
+%{ endif ~}
+
+runcmd:
+  # ----------------------------------------------------------
+  # 全エージェント共通
+  # ----------------------------------------------------------
+  - /usr/local/bin/install-opencode.sh
+
+%{ if install_dotnet_sdk ~}
+  # ----------------------------------------------------------
+  # .NET SDKが必要なエージェントのみ
+  # ----------------------------------------------------------
+  - /usr/local/bin/install-dotnet10.sh
+%{ endif ~}
+
+final_message: |
+  Linux Build Lab AI team environment is ready.
+
+  Agent role:
+    ${agent_role}
+
+  Agent role file:
+    /etc/ai-agent/role
+
+  OpenCode:
+    /usr/local/bin/opencode
+
+  Workspace:
+    ${workspace_directory}
+
+  OpenCode installation log:
+    /var/log/opencode-install.log
+
+%{ if install_dotnet_sdk ~}
+  .NET installation log:
+    /var/log/dotnet10-install.log
+%{ endif ~}

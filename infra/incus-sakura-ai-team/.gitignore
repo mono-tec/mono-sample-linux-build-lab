@@ -1,0 +1,20 @@
+# OpenTofu / Terraform working directory
+.terraform/
+
+# Local variable files containing secrets
+terraform.tfvars
+*.auto.tfvars
+
+# State files
+*.tfstate
+*.tfstate.*
+
+# Plan files
+*.tfplan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# State lock information
+.terraform.tfstate.lock.info

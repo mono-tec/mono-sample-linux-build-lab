@@ -1,0 +1,57 @@
+# ============================================================
+# Linux Build Lab
+# OpenCode + Sakura AI Engine
+# Role-based AI Agent Team
+#
+# このファイルをterraform.tfvarsとしてコピーし、
+# 利用環境に合わせて値を変更してください。
+#
+# terraform.tfvarsには、さくらのAI Engineの
+# アカウントトークンが含まれるため、
+# Gitへ登録しないでください。
+# ============================================================
+
+# ------------------------------------------------------------
+# Incus共通設定
+# ------------------------------------------------------------
+
+image = "images:ubuntu/24.04/cloud"
+
+# ------------------------------------------------------------
+# AIエージェント設定
+# ------------------------------------------------------------
+
+agents = {
+  agent01 = {
+    instance_name      = "ubuntu2404-sakura-agent-01"
+    role               = "design"
+    cpu_count          = 1
+    memory_limit       = "2GiB"
+    install_dotnet_sdk = false
+  }
+
+  agent02 = {
+    instance_name      = "ubuntu2404-sakura-agent-02"
+    role               = "build"
+    cpu_count          = 2
+    memory_limit       = "4GiB"
+    install_dotnet_sdk = true
+  }
+}
+
+# ------------------------------------------------------------
+# さくらのAI Engine設定
+# ------------------------------------------------------------
+
+sakura_ai_base_url = "https://api.ai.sakura.ad.jp/v1"
+
+sakura_ai_token = "YOUR_SAKURA_AI_ACCOUNT_TOKEN"
+
+sakura_ai_model = "preview/Kimi-K2.6"
+
+# ------------------------------------------------------------
+# AIエージェント共有作業領域
+# ------------------------------------------------------------
+
+experiment_root          = "/home/ubuntu/ai-agent-team"
+container_workspace_path = "/workspace"
