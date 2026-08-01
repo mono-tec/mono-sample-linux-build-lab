@@ -43,6 +43,7 @@ resource "incus_instance" "sakura_ai_agent" {
     properties = {
       source = var.experiment_root
       path   = var.container_workspace_path
+      shift  = "true"
     }
   }
 }
