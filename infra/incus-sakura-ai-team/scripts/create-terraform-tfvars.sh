@@ -112,61 +112,62 @@ echo
 
 echo "AIエージェント01を設定します。"
 echo
+echo "入力例:"
+echo "  コンテナ名 : ubuntu2404-sakura-agent-01"
+echo "  役割       : design"
+echo "  仮想CPU数  : 1"
+echo "  メモリ上限 : 2GiB"
+echo "  .NET SDK   : false"
+echo
 
 read -r -p \
   "コンテナ名 [${DEFAULT_AGENT01_INSTANCE_NAME}]: " \
   agent01_instance_name
 
-agent01_instance_name="${
-  agent01_instance_name:-${DEFAULT_AGENT01_INSTANCE_NAME}
-}"
+agent01_instance_name="${agent01_instance_name:-${DEFAULT_AGENT01_INSTANCE_NAME}}"
 
 read -r -p \
-  "役割 [${DEFAULT_AGENT01_ROLE}]: " \
+  "役割（例: design / build / test / review） [${DEFAULT_AGENT01_ROLE}]: " \
   agent01_role
 
 agent01_role="${agent01_role:-${DEFAULT_AGENT01_ROLE}}"
 
 while true; do
   read -r -p \
-    "仮想CPU数 [${DEFAULT_AGENT01_CPU_COUNT}]: " \
+    "仮想CPU数（1以上の整数） [${DEFAULT_AGENT01_CPU_COUNT}]: " \
     agent01_cpu_count
 
-  agent01_cpu_count="${
-    agent01_cpu_count:-${DEFAULT_AGENT01_CPU_COUNT}
-  }"
+  agent01_cpu_count="${agent01_cpu_count:-${DEFAULT_AGENT01_CPU_COUNT}}"
 
   if validate_positive_integer "${agent01_cpu_count}"; then
     break
   fi
 
   echo "[ERROR] 仮想CPU数は1以上の整数で入力してください。"
+  echo "        例: 1、2、4"
 done
 
 while true; do
   read -r -p \
-    "メモリ上限 [${DEFAULT_AGENT01_MEMORY_LIMIT}]: " \
+    "メモリ上限（MiBまたはGiB） [${DEFAULT_AGENT01_MEMORY_LIMIT}]: " \
     agent01_memory_limit
 
-  agent01_memory_limit="${
-    agent01_memory_limit:-${DEFAULT_AGENT01_MEMORY_LIMIT}
-  }"
+  agent01_memory_limit="${agent01_memory_limit:-${DEFAULT_AGENT01_MEMORY_LIMIT}}"
 
   if validate_memory_limit "${agent01_memory_limit}"; then
     break
   fi
 
-  echo "[ERROR] メモリ上限は2GiBや2048MiBの形式で入力してください。"
+  echo "[ERROR] メモリ上限はMiBまたはGiB形式で入力してください。"
+  echo "        例: 2048MiB、2GiB、4GiB"
 done
 
 while true; do
   read -r -p \
-    ".NET 10 SDKを導入するか [${DEFAULT_AGENT01_INSTALL_DOTNET_SDK}]: " \
+    ".NET 10 SDKを導入するか（true / false） [${DEFAULT_AGENT01_INSTALL_DOTNET_SDK}]: " \
     agent01_install_dotnet_sdk
 
-  agent01_install_dotnet_sdk="${
-    agent01_install_dotnet_sdk:-${DEFAULT_AGENT01_INSTALL_DOTNET_SDK}
-  }"
+  agent01_install_dotnet_sdk="${agent01_install_dotnet_sdk:-${DEFAULT_AGENT01_INSTALL_DOTNET_SDK}}"
 
   if validate_boolean "${agent01_install_dotnet_sdk}"; then
     break
@@ -182,61 +183,62 @@ done
 echo
 echo "AIエージェント02を設定します。"
 echo
+echo "入力例:"
+echo "  コンテナ名 : ubuntu2404-sakura-agent-02"
+echo "  役割       : build"
+echo "  仮想CPU数  : 2"
+echo "  メモリ上限 : 4GiB"
+echo "  .NET SDK   : true"
+echo
 
 read -r -p \
   "コンテナ名 [${DEFAULT_AGENT02_INSTANCE_NAME}]: " \
   agent02_instance_name
 
-agent02_instance_name="${
-  agent02_instance_name:-${DEFAULT_AGENT02_INSTANCE_NAME}
-}"
+agent02_instance_name="${agent02_instance_name:-${DEFAULT_AGENT02_INSTANCE_NAME}}"
 
 read -r -p \
-  "役割 [${DEFAULT_AGENT02_ROLE}]: " \
+  "役割（例: design / build / test / review） [${DEFAULT_AGENT02_ROLE}]: " \
   agent02_role
 
 agent02_role="${agent02_role:-${DEFAULT_AGENT02_ROLE}}"
 
 while true; do
   read -r -p \
-    "仮想CPU数 [${DEFAULT_AGENT02_CPU_COUNT}]: " \
+    "仮想CPU数（1以上の整数） [${DEFAULT_AGENT02_CPU_COUNT}]: " \
     agent02_cpu_count
 
-  agent02_cpu_count="${
-    agent02_cpu_count:-${DEFAULT_AGENT02_CPU_COUNT}
-  }"
+  agent02_cpu_count="${agent02_cpu_count:-${DEFAULT_AGENT02_CPU_COUNT}}"
 
   if validate_positive_integer "${agent02_cpu_count}"; then
     break
   fi
 
   echo "[ERROR] 仮想CPU数は1以上の整数で入力してください。"
+  echo "        例: 1、2、4"
 done
 
 while true; do
   read -r -p \
-    "メモリ上限 [${DEFAULT_AGENT02_MEMORY_LIMIT}]: " \
+    "メモリ上限（MiBまたはGiB） [${DEFAULT_AGENT02_MEMORY_LIMIT}]: " \
     agent02_memory_limit
 
-  agent02_memory_limit="${
-    agent02_memory_limit:-${DEFAULT_AGENT02_MEMORY_LIMIT}
-  }"
+  agent02_memory_limit="${agent02_memory_limit:-${DEFAULT_AGENT02_MEMORY_LIMIT}}"
 
   if validate_memory_limit "${agent02_memory_limit}"; then
     break
   fi
 
-  echo "[ERROR] メモリ上限は4GiBや4096MiBの形式で入力してください。"
+  echo "[ERROR] メモリ上限はMiBまたはGiB形式で入力してください。"
+  echo "        例: 2048MiB、4GiB、8GiB"
 done
 
 while true; do
   read -r -p \
-    ".NET 10 SDKを導入するか [${DEFAULT_AGENT02_INSTALL_DOTNET_SDK}]: " \
+    ".NET 10 SDKを導入するか（true / false） [${DEFAULT_AGENT02_INSTALL_DOTNET_SDK}]: " \
     agent02_install_dotnet_sdk
 
-  agent02_install_dotnet_sdk="${
-    agent02_install_dotnet_sdk:-${DEFAULT_AGENT02_INSTALL_DOTNET_SDK}
-  }"
+  agent02_install_dotnet_sdk="${agent02_install_dotnet_sdk:-${DEFAULT_AGENT02_INSTALL_DOTNET_SDK}}"
 
   if validate_boolean "${agent02_install_dotnet_sdk}"; then
     break
@@ -245,6 +247,13 @@ while true; do
   echo "[ERROR] trueまたはfalseを入力してください。"
 done
 
+# コンテナ名の重複を確認する。
+if [[ "${agent01_instance_name}" == "${agent02_instance_name}" ]]; then
+  echo "[ERROR] AIエージェントのコンテナ名が重複しています。"
+  echo "        agent01: ${agent01_instance_name}"
+  echo "        agent02: ${agent02_instance_name}"
+  exit 1
+fi
 # コンテナ名の重複を確認する。
 if [[ "${agent01_instance_name}" == "${agent02_instance_name}" ]]; then
   echo "[ERROR] AIエージェントのコンテナ名が重複しています。"
@@ -261,9 +270,7 @@ read -r -p \
   "さくらのAI Engine Base URL [${DEFAULT_SAKURA_AI_BASE_URL}]: " \
   sakura_ai_base_url
 
-sakura_ai_base_url="${
-  sakura_ai_base_url:-${DEFAULT_SAKURA_AI_BASE_URL}
-}"
+sakura_ai_base_url="${sakura_ai_base_url:-${DEFAULT_SAKURA_AI_BASE_URL}}"
 
 if [[ ! "${sakura_ai_base_url}" =~ ^https:// ]]; then
   echo "[ERROR] Base URLはhttps://から始まる必要があります。"
@@ -321,9 +328,7 @@ while true; do
     "コンテナ内の共有マウント先 [${DEFAULT_CONTAINER_WORKSPACE_PATH}]: " \
     container_workspace_path
 
-  container_workspace_path="${
-    container_workspace_path:-${DEFAULT_CONTAINER_WORKSPACE_PATH}
-  }"
+   container_workspace_path="${container_workspace_path:-${DEFAULT_CONTAINER_WORKSPACE_PATH}}"
 
   if validate_absolute_path "${container_workspace_path}"; then
     break

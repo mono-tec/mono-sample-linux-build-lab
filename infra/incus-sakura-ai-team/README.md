@@ -279,62 +279,46 @@ cd infra/incus-sakura-ai-team
 
 ## 3．terraform.tfvarsの作成
 
-設定例をコピーします。
+設定生成スクリプトへ実行権限を付与します。
 
 ```bash
-cp \
-  terraform.tfvars.example \
-  terraform.tfvars
-
-chmod 600 terraform.tfvars
+chmod +x \
+  scripts/create-terraform-tfvars.sh
 ```
 
-`terraform.tfvars`を編集し、次の内容を設定します。
+設定生成スクリプトを実行します。
 
-- AIエージェントの数
-- 各コンテナ名
-- 各エージェントの役割
-- 各コンテナの仮想CPU数
-- 各コンテナのメモリ上限
-- .NET 10 SDKを導入するか
-- Ubuntuホスト上の検証ルート
-- コンテナ内の共有マウント先
+```bash
+./scripts/create-terraform-tfvars.sh
+```
+
+対話形式で、次の内容を設定します。
+
+- AIエージェント01のコンテナ名
+- AIエージェント01の役割
+- AIエージェント01の仮想CPU数
+- AIエージェント01のメモリ上限
+- AIエージェント01へ.NET 10 SDKを導入するか
+- AIエージェント02のコンテナ名
+- AIエージェント02の役割
+- AIエージェント02の仮想CPU数
+- AIエージェント02のメモリ上限
+- AIエージェント02へ.NET 10 SDKを導入するか
 - さくらのAI Engine Base URL
 - さくらのAI Engineアカウントトークン
 - 使用するモデル
+- Ubuntuホスト上の共有作業領域
+- コンテナ内の共有マウント先
 
-初期例：
+入力内容を確認し、問題がなければ`Y`を入力します。
 
-```hcl
-image = "images:ubuntu/24.04/cloud"
+スクリプトは、プロジェクトルートへ次のファイルを作成します。
 
-agents = {
-  agent01 = {
-    instance_name      = "ubuntu2404-sakura-agent-01"
-    role               = "design"
-    cpu_count          = 1
-    memory_limit       = "2GiB"
-    install_dotnet_sdk = false
-  }
-
-  agent02 = {
-    instance_name      = "ubuntu2404-sakura-agent-02"
-    role               = "build"
-    cpu_count          = 2
-    memory_limit       = "4GiB"
-    install_dotnet_sdk = true
-  }
-}
-
-experiment_root          = "/home/ubuntu/ai-agent-team"
-container_workspace_path = "/workspace"
-
-sakura_ai_base_url = "https://api.ai.sakura.ad.jp/v1"
-sakura_ai_token    = "YOUR_SAKURA_AI_ACCOUNT_TOKEN"
-sakura_ai_model    = "preview/Kimi-K2.6"
+```text
+terraform.tfvars
 ```
 
-生成したファイルの権限を確認します。
+ファイルの権限は、自動的に`600`へ設定されます。
 
 ```bash
 ls -l terraform.tfvars
@@ -346,9 +330,17 @@ ls -l terraform.tfvars
 -rw------- ... terraform.tfvars
 ```
 
-`terraform.tfvars`にはアカウントトークンが含まれるため、ファイル内容を不用意に画面へ表示しないでください。
+`terraform.tfvars`には、さくらのAI Engineアカウントトークンが含まれます。
 
-また、Gitへ登録しないでください。
+次の点に注意してください。
+
+- Gitへ登録しないこと
+- 内容を不用意に画面へ表示しないこと
+- 外部へ共有しないこと
+
+`terraform.tfvars.example`は、生成される設定形式の公開例として使用します。
+
+実際の`terraform.tfvars`作成には、`scripts/create-terraform-tfvars.sh`を使用します。
 
 ## 4．共有検証ディレクトリの準備
 
