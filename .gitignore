@@ -74,3 +74,7 @@ Desktop.ini
 *~
 *.bak
 *.orig
+
+# Private AI agent operation scripts
+private-scripts/
+

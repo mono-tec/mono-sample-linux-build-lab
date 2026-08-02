@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HelloLinuxBuildLab/HelloLinuxBuildLab.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HelloLinuxBuildLab.Tests/HelloLinuxBuildLab.Tests.csproj" />
+  </Folder>
+</Solution>
