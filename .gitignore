@@ -78,3 +78,5 @@ Desktop.ini
 # Private AI agent operation scripts
 private-scripts/
 
+# Generated artifacts
+artifacts/

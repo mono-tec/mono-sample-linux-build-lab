@@ -1,0 +1,5 @@
+# Linux shell scripts
+*.sh text eol=lf
+
+# Windows PowerShell scripts
+*.ps1 text eol=crlf
