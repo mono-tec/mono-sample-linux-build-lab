@@ -1,15 +1,35 @@
 #cloud-config
 
+# ============================================================
+# パッケージ更新設定
+#
+# パッケージ一覧は更新しますが、
+# cloud-init実行時のOS全体アップグレードは行いません。
+# ============================================================
 package_update: true
 package_upgrade: false
 
+# ============================================================
+# 検証環境で使用するパッケージ
+#
+# jq:
+#   GitHub Releases APIのJSONから
+#   最新debパッケージのURLを取得するために使用します。
+#
+# dotnet-runtime-10.0:
+#   LinuxBuildLab.Cameraの実行環境として使用します。
+# ============================================================
 packages:
   - git
   - curl
+  - jq
   - openssh-server
   - dotnet-runtime-10.0
   - file
 
+# ============================================================
+# ubuntuユーザー設定
+# ============================================================
 users:
   - name: ubuntu
     gecos: Ubuntu
@@ -24,10 +44,17 @@ users:
     ssh_authorized_keys:
       - ${ssh_public_key}
 
+# SSHは公開鍵認証のみ使用します。
 ssh_pwauth: false
 
+# ============================================================
+# 初期配置ファイル
+# ============================================================
 write_files:
-  # macvlan側NICでIPv4アドレスを取得する設定
+
+  # ----------------------------------------------------------
+  # macvlan側NICのIPv4設定
+  # ----------------------------------------------------------
   - path: /etc/netplan/60-eth1.yaml
     owner: root:root
     permissions: "0600"
@@ -45,67 +72,140 @@ write_files:
 %{ endif }
             dhcp6: true
 
-  # GitHub Releaseからカメラ用debパッケージを取得し、
-  # インストール後にsystemdのoneshotサービスを実行するスクリプト
+  # ----------------------------------------------------------
+  # GitHub Releasesから最新のCamera用debを取得するスクリプト
+  #
+  # バージョン番号はTerraform側では指定しません。
+  #
+  # GitHub Releasesの「latest」を問い合わせ、
+  # PACKAGE_NAME_x.x.x_amd64.deb に一致する
+  # 最新のdebパッケージを取得します。
+  #
+  # このIncus環境は「最新パッケージが新規Linux環境で
+  # 正常にインストール・実行できるか」の検証用なので、
+  # 再現性よりも最新版追従を優先しています。
+  # ----------------------------------------------------------
   - path: /usr/local/bin/install-linux-build-lab-camera.sh
     owner: root:root
     permissions: "0755"
     content: |
       #!/usr/bin/env bash
+
       set -euo pipefail
 
+      # --------------------------------------------------------
+      # Terraformから渡される値
+      # --------------------------------------------------------
       PACKAGE_NAME="${package_name}"
-      PACKAGE_VERSION="${package_version}"
-      RELEASE_TAG="v$${PACKAGE_VERSION}"
-      PACKAGE_FILE="$${PACKAGE_NAME}_$${PACKAGE_VERSION}_amd64.deb"
-      DOWNLOAD_FILE="/tmp/$${PACKAGE_FILE}"
-      DOWNLOAD_URL="https://github.com/${github_repository}/releases/download/$${RELEASE_TAG}/$${PACKAGE_FILE}"
+      GITHUB_REPOSITORY="${github_repository}"
+
+      # systemdサービス名
       SERVICE_NAME="$${PACKAGE_NAME}.service"
 
+      # GitHub Releases API
+      LATEST_RELEASE_API="https://api.github.com/repos/$${GITHUB_REPOSITORY}/releases/latest"
+
       echo "[INFO] Package name: $${PACKAGE_NAME}"
-      echo "[INFO] Package version: $${PACKAGE_VERSION}"
-      echo "[INFO] Release tag: $${RELEASE_TAG}"
-      echo "[INFO] Download URL: $${DOWNLOAD_URL}"
+      echo "[INFO] GitHub repository: $${GITHUB_REPOSITORY}"
+      echo "[INFO] Latest release API: $${LATEST_RELEASE_API}"
       echo "[INFO] Service name: $${SERVICE_NAME}"
 
+      # --------------------------------------------------------
+      # 最新Releaseからamd64向けdebのURLを取得
+      #
+      # 例:
+      # linux-build-lab-camera_0.3.2_amd64.deb
+      # --------------------------------------------------------
+      PACKAGE_URL="$$( \
+        curl \
+          --fail \
+          --silent \
+          --show-error \
+          --location \
+          "$${LATEST_RELEASE_API}" \
+        | jq -r \
+            --arg PACKAGE_NAME "$${PACKAGE_NAME}" \
+            '.assets[]
+             | select(.name | startswith($PACKAGE_NAME + "_"))
+             | select(.name | endswith("_amd64.deb"))
+             | .browser_download_url' \
+        | head -n 1 \
+      )"
+
+      # URLが取得できなかった場合は処理を中止
+      if [[ -z "$${PACKAGE_URL}" || "$${PACKAGE_URL}" == "null" ]]; then
+        echo "[ERROR] Latest release deb package was not found."
+        exit 1
+      fi
+
+      PACKAGE_FILE="$$(basename "$${PACKAGE_URL}")"
+      DOWNLOAD_FILE="/tmp/$${PACKAGE_FILE}"
+
+      echo "[INFO] Package URL: $${PACKAGE_URL}"
+      echo "[INFO] Package file: $${PACKAGE_FILE}"
+
+      # --------------------------------------------------------
+      # debパッケージをダウンロード
+      # --------------------------------------------------------
       curl \
         --fail \
         --location \
         --retry 3 \
         --retry-delay 5 \
         --output "$${DOWNLOAD_FILE}" \
-        "$${DOWNLOAD_URL}"
+        "$${PACKAGE_URL}"
 
+      # --------------------------------------------------------
+      # debパッケージをインストール
+      #
+      # aptを使用することで、依存パッケージがある場合も
+      # あわせて解決させます。
+      # --------------------------------------------------------
       apt-get install -y "$${DOWNLOAD_FILE}"
 
+      # --------------------------------------------------------
+      # systemd設定を再読込し、
+      # Cameraサンプルのoneshotサービスを実行
+      # --------------------------------------------------------
       systemctl daemon-reload
       systemctl start "$${SERVICE_NAME}"
 
+      # ダウンロードした一時ファイルを削除
       rm -f "$${DOWNLOAD_FILE}"
 
       echo "[INFO] Camera package installation completed."
 
+# ============================================================
+# 初回起動時の処理
+# ============================================================
 runcmd:
+
+  # ----------------------------------------------------------
   # SSHパスワード認証は無効のまま、
-  # 公開鍵認証を許可するためubuntuアカウントのロックを解除
+  # 公開鍵認証でubuntuユーザーへログインできるようにします。
+  # ----------------------------------------------------------
   - |
     PASSWORD_HASH=$(openssl passwd -6 "$(openssl rand -hex 32)")
     usermod -p "$PASSWORD_HASH" ubuntu
 
-  # 念のためubuntuユーザーがvideoグループへ
-  # 登録されていることを保証
+  # ----------------------------------------------------------
+  # USBカメラへアクセスできるように
+  # ubuntuユーザーをvideoグループへ追加します。
+  # ----------------------------------------------------------
   - usermod -aG video ubuntu
 
-  # SSHサーバーを起動
+  # SSHサーバーを有効化
   - systemctl enable --now ssh
 
-  # macvlan側NICの設定を反映
+  # macvlan側NIC設定を反映
   - netplan generate
   - netplan apply
 
   # .NET Runtime情報をログへ保存
   - dotnet --info > /var/log/dotnet-runtime-info.log 2>&1
 
-  # カメラ用debパッケージを取得してインストールし、
-  # systemdのoneshotサービスから静止画を取得
+  # ----------------------------------------------------------
+  # GitHub Releasesから最新のCamera用debを取得し、
+  # インストール後にoneshotサービスを実行します。
+  # ----------------------------------------------------------
   - /usr/local/bin/install-linux-build-lab-camera.sh > /var/log/linux-build-lab-camera-install.log 2>&1

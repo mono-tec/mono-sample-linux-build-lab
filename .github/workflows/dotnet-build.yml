@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build and release Linux x64 application
+    name: Build and release Linux x64 packages
     runs-on: ubuntu-latest
 
     steps:
@@ -34,9 +34,16 @@ jobs:
       # ============================================================
       # 3. Gitタグからバージョンを取得
       #
-      # v0.3.2
-      # ↓
-      # 0.3.2
+      # 例:
+      #   v0.3.3
+      #     ↓
+      #   0.3.3
+      #
+      # このVERSIONを、
+      # ・.NET Assembly Version
+      # ・SBOM Version
+      # ・deb Version
+      # で共通利用します。
       # ============================================================
       - name: Set version from Git tag
         shell: bash
@@ -52,15 +59,27 @@ jobs:
           echo "Version: $VERSION"
 
       # ============================================================
-      # 4. Restore / Build
+      # 4. Restore
+      #
+      # Sample / Camera の両プロジェクトを
+      # linux-x64向けにRestoreします。
       # ============================================================
-      - name: Restore dependencies
+      - name: Restore Sample
         run: >
           dotnet restore
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
           --runtime linux-x64
 
-      - name: Build
+      - name: Restore Camera
+        run: >
+          dotnet restore
+          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
+          --runtime linux-x64
+
+      # ============================================================
+      # 5. Build
+      # ============================================================
+      - name: Build Sample
         run: >
           dotnet build
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
@@ -70,10 +89,24 @@ jobs:
           -p:Version=${{ env.VERSION }}
           -p:ContinuousIntegrationBuild=true
 
+      - name: Build Camera
+        run: >
+          dotnet build
+          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
+          --configuration Release
+          --runtime linux-x64
+          --no-restore
+          -p:Version=${{ env.VERSION }}
+          -p:ContinuousIntegrationBuild=true
+
       # ============================================================
-      # 5. Linux x64向けpublish
+      # 6. Linux x64向けPublish
+      #
+      # debへ格納する実行ファイルを作成します。
+      # Framework-dependentで発行するため、
+      # 実行環境には.NET Runtimeが必要です。
       # ============================================================
-      - name: Publish for Linux x64
+      - name: Publish Sample for Linux x64
         run: >
           dotnet publish
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
@@ -85,8 +118,23 @@ jobs:
           -p:Version=${{ env.VERSION }}
           -p:ContinuousIntegrationBuild=true
 
+      - name: Publish Camera for Linux x64
+        run: >
+          dotnet publish
+          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
+          --configuration Release
+          --runtime linux-x64
+          --self-contained false
+          --no-restore
+          --output artifacts/publish/linux-build-lab-camera
+          -p:Version=${{ env.VERSION }}
+          -p:ContinuousIntegrationBuild=true
+
       # ============================================================
-      # 6. sbom-toolをインストール
+      # 7. sbom-toolをインストール
+      #
+      # GitHub Actions Runner上だけに配置します。
+      # 製品実行環境へsbom-toolを導入する必要はありません。
       # ============================================================
       - name: Install sbom-tool
         shell: bash
@@ -101,9 +149,12 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       # ============================================================
-      # 7. ONOTをインストール
+      # 8. ONOTをインストール
       #
-      # ローカル環境で動作確認したバージョンに固定
+      # ローカルWSL環境で動作確認した1.1.2へ固定します。
+      #
+      # ONOTもGitHub Actions Runner上だけで使用し、
+      # 製品実行環境には含めません。
       # ============================================================
       - name: Install ONOT
         shell: bash
@@ -115,9 +166,9 @@ jobs:
           pip install "onot[spdx,cyclonedx,excel,api]==1.1.2"
 
       # ============================================================
-      # 8. SBOMを生成
+      # 9. Sample SBOM生成
       # ============================================================
-      - name: Generate SBOM
+      - name: Generate Sample SBOM
         shell: bash
         run: |
           sbom-tool generate \
@@ -132,29 +183,66 @@ jobs:
             -D true
 
       # ============================================================
-      # 9. ONOTでOSS Noticeを生成
+      # 10. Camera SBOM生成
       # ============================================================
-      - name: Generate OSS notice
+      - name: Generate Camera SBOM
+        shell: bash
+        run: |
+          sbom-tool generate \
+            -b ./artifacts/publish/linux-build-lab-camera \
+            -bc ./src/LinuxBuildLab.Camera \
+            -pn linux-build-lab-camera \
+            -pv "$VERSION" \
+            -ps mono-tec \
+            -nsb "https://github.com/mono-tec/mono-sample-linux-build-lab" \
+            -li true \
+            -pm true \
+            -D true
+
+      # ============================================================
+      # 11. Sample OSS Notice生成
+      #
+      # SampleとCameraで出力先を分離します。
+      # ============================================================
+      - name: Generate Sample OSS notice
         shell: bash
         run: |
           source "$RUNNER_TEMP/onot-venv/bin/activate"
 
-          rm -rf ./artifacts/license
-          mkdir -p ./artifacts/license
+          rm -rf ./artifacts/license/linux-build-lab-sample
+          mkdir -p ./artifacts/license/linux-build-lab-sample
 
           onot generate \
             -i ./artifacts/publish/linux-build-lab-sample/_manifest/spdx_2.2/manifest.spdx.json \
             -f markdown \
-            --output-dir ./artifacts/license
+            --output-dir ./artifacts/license/linux-build-lab-sample
 
       # ============================================================
-      # 10. Complianceファイルを整理
+      # 12. Camera OSS Notice生成
+      # ============================================================
+      - name: Generate Camera OSS notice
+        shell: bash
+        run: |
+          source "$RUNNER_TEMP/onot-venv/bin/activate"
+
+          rm -rf ./artifacts/license/linux-build-lab-camera
+          mkdir -p ./artifacts/license/linux-build-lab-camera
+
+          onot generate \
+            -i ./artifacts/publish/linux-build-lab-camera/_manifest/spdx_2.2/manifest.spdx.json \
+            -f markdown \
+            --output-dir ./artifacts/license/linux-build-lab-camera
+
+      # ============================================================
+      # 13. Sample Complianceファイルを整理
+      #
+      # 最終的に以下の3ファイルへ統一します。
       #
       # LICENSE
       # THIRD-PARTY-NOTICES.md
       # sbom.spdx.json
       # ============================================================
-      - name: Prepare compliance files
+      - name: Prepare Sample compliance files
         shell: bash
         run: |
           COMPLIANCE_DIR="./artifacts/compliance/linux-build-lab-sample"
@@ -165,14 +253,14 @@ jobs:
           cp ./LICENSE \
             "$COMPLIANCE_DIR/LICENSE"
 
-          NOTICE_FILE="$(find ./artifacts/license \
+          NOTICE_FILE="$(find ./artifacts/license/linux-build-lab-sample \
             -maxdepth 1 \
             -type f \
             -name '*.md' \
             | head -n 1)"
 
           if [[ -z "$NOTICE_FILE" ]]; then
-            echo "OSS Notice file was not generated."
+            echo "Sample OSS Notice file was not generated."
             exit 1
           fi
 
@@ -183,16 +271,57 @@ jobs:
             ./artifacts/publish/linux-build-lab-sample/_manifest/spdx_2.2/manifest.spdx.json \
             "$COMPLIANCE_DIR/sbom.spdx.json"
 
-          echo "Compliance files:"
+          echo "Sample compliance files:"
           find "$COMPLIANCE_DIR" -maxdepth 1 -type f -print
 
       # ============================================================
-      # 11. deb作成
-      #
-      # PACKAGE_VERSIONはGitタグ由来
-      # PUBLISH_DIRは上で生成したpublish成果物を使用
+      # 14. Camera Complianceファイルを整理
       # ============================================================
-      - name: Build deb package
+      - name: Prepare Camera compliance files
+        shell: bash
+        run: |
+          COMPLIANCE_DIR="./artifacts/compliance/linux-build-lab-camera"
+
+          rm -rf "$COMPLIANCE_DIR"
+          mkdir -p "$COMPLIANCE_DIR"
+
+          cp ./LICENSE \
+            "$COMPLIANCE_DIR/LICENSE"
+
+          NOTICE_FILE="$(find ./artifacts/license/linux-build-lab-camera \
+            -maxdepth 1 \
+            -type f \
+            -name '*.md' \
+            | head -n 1)"
+
+          if [[ -z "$NOTICE_FILE" ]]; then
+            echo "Camera OSS Notice file was not generated."
+            exit 1
+          fi
+
+          cp "$NOTICE_FILE" \
+            "$COMPLIANCE_DIR/THIRD-PARTY-NOTICES.md"
+
+          cp \
+            ./artifacts/publish/linux-build-lab-camera/_manifest/spdx_2.2/manifest.spdx.json \
+            "$COMPLIANCE_DIR/sbom.spdx.json"
+
+          echo "Camera compliance files:"
+          find "$COMPLIANCE_DIR" -maxdepth 1 -type f -print
+
+      # ============================================================
+      # 15. Sample deb作成
+      #
+      # PACKAGE_VERSION:
+      #   Gitタグから生成したVERSION
+      #
+      # PUBLISH_DIR:
+      #   Sampleのpublish成果物
+      #
+      # COMPLIANCE_DIR:
+      #   LICENSE / NOTICE / SBOM
+      # ============================================================
+      - name: Build Sample deb package
         shell: bash
         env:
           PACKAGE_VERSION: ${{ env.VERSION }}
@@ -203,50 +332,82 @@ jobs:
           ./packaging/sample-deb/build-deb.sh
 
       # ============================================================
-      # 12. debの内容を確認
+      # 16. Camera deb作成
       # ============================================================
-      - name: Inspect deb package
+      - name: Build Camera deb package
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ env.VERSION }}
+          PUBLISH_DIR: ${{ github.workspace }}/artifacts/publish/linux-build-lab-camera
+          COMPLIANCE_DIR: ${{ github.workspace }}/artifacts/compliance/linux-build-lab-camera
+        run: |
+          chmod +x ./packaging/camera-deb/build-deb.sh
+          ./packaging/camera-deb/build-deb.sh
+
+      # ============================================================
+      # 17. Sample deb内容確認
+      #
+      # GitHub Actions上でパッケージ内部を確認します。
+      # ============================================================
+      - name: Inspect Sample deb package
         shell: bash
         run: |
           DEB_FILE="./artifacts/packages/linux-build-lab-sample_${VERSION}_amd64.deb"
 
-          echo "Package:"
+          echo "Sample package:"
           ls -lh "$DEB_FILE"
 
           echo
-          echo "Package contents:"
+          echo "Sample package contents:"
           dpkg-deb --contents "$DEB_FILE"
 
       # ============================================================
-      # 13. ZIPも作成
+      # 18. Camera deb内容確認
       # ============================================================
-      - name: Create ZIP archive
+      - name: Inspect Camera deb package
         shell: bash
         run: |
-          cd artifacts/publish/linux-build-lab-sample
-          zip -r "../../LinuxBuildLab.Sample-linux-x64-${VERSION}.zip" .
+          DEB_FILE="./artifacts/packages/linux-build-lab-camera_${VERSION}_amd64.deb"
+
+          echo "Camera package:"
+          ls -lh "$DEB_FILE"
+
+          echo
+          echo "Camera package contents:"
+          dpkg-deb --contents "$DEB_FILE"
 
       # ============================================================
-      # 14. Workflow Artifact
+      # 19. Workflow Artifact
+      #
+      # GitHub Actionsの実行結果として、
+      # Sample / Camera のdebとComplianceファイルを保存します。
+      #
+      # ZIPは作成しません。
       # ============================================================
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
         with:
-          name: LinuxBuildLab.Sample-${{ env.VERSION }}
+          name: LinuxBuildLab-${{ env.VERSION }}
           path: |
-            artifacts/LinuxBuildLab.Sample-linux-x64-${{ env.VERSION }}.zip
             artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
+            artifacts/packages/linux-build-lab-camera_${{ env.VERSION }}_amd64.deb
             artifacts/compliance/linux-build-lab-sample/*
+            artifacts/compliance/linux-build-lab-camera/*
           if-no-files-found: error
           retention-days: 14
 
       # ============================================================
-      # 15. GitHub Release
+      # 20. GitHub Release
+      #
+      # Release Assetsにはdebだけを配置します。
+      #
+      # cloud-initはGitHub Releasesのlatestから、
+      # PACKAGE_NAMEに一致するdebを取得します。
       # ============================================================
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/LinuxBuildLab.Sample-linux-x64-${{ env.VERSION }}.zip
             artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
+            artifacts/packages/linux-build-lab-camera_${{ env.VERSION }}_amd64.deb
           generate_release_notes: true
