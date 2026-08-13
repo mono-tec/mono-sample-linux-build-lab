@@ -12,9 +12,9 @@ set -euo pipefail
 # 作成するdebパッケージ名です。
 PACKAGE_NAME="linux-build-lab-camera"
 
-# 環境変数PACKAGE_VERSIONが指定されていない場合は、
-# 既定値として0.1.0を使用します。
-PACKAGE_VERSION="${PACKAGE_VERSION:-0.1.0}"
+# パッケージバージョンは外部から必ず指定します。
+# GitHub ActionsではGitタグから取得したバージョンを渡します。
+PACKAGE_VERSION="${PACKAGE_VERSION:?PACKAGE_VERSION is required}"
 
 # 作成するdebパッケージのCPUアーキテクチャです。
 # 今回はLinux x64向けのためamd64を使用します。
@@ -56,6 +56,15 @@ OUTPUT_DIR="${REPOSITORY_ROOT}/artifacts/packages"
 # PUBLISH_DIRが未指定の場合は、カメラアプリ専用のpublish先を使用します。
 PUBLISH_DIR="${PUBLISH_DIR:-${REPOSITORY_ROOT}/artifacts/publish/${PACKAGE_NAME}}"
 
+# GitHub Actionsなどで生成した
+# ライセンス・Notice・SBOMを配置したディレクトリです。
+#
+# 想定内容:
+#   LICENSE
+#   THIRD-PARTY-NOTICES.md
+#   sbom.spdx.json
+COMPLIANCE_DIR="${COMPLIANCE_DIR:-${REPOSITORY_ROOT}/artifacts/compliance/${PACKAGE_NAME}}"
+
 
 # ============================================================
 # 作業ディレクトリの初期化
@@ -69,6 +78,7 @@ mkdir -p \
   "${WORK_DIR}/DEBIAN" \
   "${WORK_DIR}/opt/${PACKAGE_NAME}" \
   "${WORK_DIR}/usr/bin" \
+  "${WORK_DIR}/usr/share/doc/${PACKAGE_NAME}" \
   "${WORK_DIR}/lib/systemd/system" \
   "${OUTPUT_DIR}"
 
@@ -104,6 +114,32 @@ cp -a \
 cp \
   "${SCRIPT_DIR}/${SERVICE_FILE}" \
   "${WORK_DIR}/lib/systemd/system/${SERVICE_FILE}"
+
+
+# ============================================================
+# ライセンス・Notice・SBOMの配置
+# ============================================================
+
+# プロジェクト自身のライセンスを配置します。
+#
+# /usr/share/doc/linux-build-lab-camera/LICENSE
+cp \
+  "${COMPLIANCE_DIR}/LICENSE" \
+  "${WORK_DIR}/usr/share/doc/${PACKAGE_NAME}/LICENSE"
+
+# 依存OSSのライセンス情報を配置します。
+#
+# /usr/share/doc/linux-build-lab-camera/THIRD-PARTY-NOTICES.md
+cp \
+  "${COMPLIANCE_DIR}/THIRD-PARTY-NOTICES.md" \
+  "${WORK_DIR}/usr/share/doc/${PACKAGE_NAME}/THIRD-PARTY-NOTICES.md"
+
+# SPDX形式のSBOMを配置します。
+#
+# /usr/share/doc/linux-build-lab-camera/sbom.spdx.json
+cp \
+  "${COMPLIANCE_DIR}/sbom.spdx.json" \
+  "${WORK_DIR}/usr/share/doc/${PACKAGE_NAME}/sbom.spdx.json"
 
 
 # ============================================================

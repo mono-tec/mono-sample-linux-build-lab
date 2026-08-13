@@ -50,10 +50,39 @@ users:
 ssh_pwauth: false
 
 # ============================================================
-# 最新debをGitHub Releasesから取得するスクリプト
+# 初期配置ファイル
 # ============================================================
 write_files:
 
+  # ----------------------------------------------------------
+  # macvlan側NICのIPv4設定
+  #
+  # network_modeがdhcpの場合:
+  #   DHCPでIPv4アドレスを取得します。
+  #
+  # それ以外の場合:
+  #   Terraformから渡されたIPv4アドレスを使用します。
+  # ----------------------------------------------------------
+  - path: /etc/netplan/60-eth1.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth1:
+%{ if network_mode == "dhcp" }
+            dhcp4: true
+%{ else }
+            dhcp4: false
+            addresses:
+              - ${guest_ipv4_address}/${guest_ipv4_prefix}
+%{ endif }
+            dhcp6: true
+
+  # ----------------------------------------------------------
+  # 最新debをGitHub Releasesから取得するスクリプト
+  # ----------------------------------------------------------
   - path: /usr/local/bin/install-linux-build-lab-sample.sh
     owner: root:root
     permissions: "0755"
@@ -160,6 +189,12 @@ runcmd:
 
   # SSHサーバーを起動
   - systemctl enable --now ssh
+
+  # ----------------------------------------------------------
+  # macvlan側NIC設定を反映
+  # ----------------------------------------------------------
+  - netplan generate
+  - netplan apply
 
   # ----------------------------------------------------------
   # .NET Runtime情報をログへ保存
