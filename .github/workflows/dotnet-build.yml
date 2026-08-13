@@ -10,17 +10,19 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build and release Linux x64 applications
+    name: Build and release Linux x64 application
     runs-on: ubuntu-latest
 
     steps:
       # ============================================================
-      # 共通準備
+      # 1. Checkout
       # ============================================================
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ============================================================
+      # 2. .NET SDK
+      # ============================================================
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v6
         with:
@@ -29,8 +31,13 @@ jobs:
       - name: Display .NET information
         run: dotnet --info
 
-      # Gitタグの先頭にあるvを除去し、
-      # debパッケージと.NETアプリのバージョンに使用します。
+      # ============================================================
+      # 3. Gitタグからバージョンを取得
+      #
+      # v0.3.2
+      # ↓
+      # 0.3.2
+      # ============================================================
       - name: Set version from Git tag
         shell: bash
         run: |
@@ -44,23 +51,16 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Version: $VERSION"
 
-      # debパッケージの作成に使用します。
-      - name: Install Debian package tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dpkg-dev
-
       # ============================================================
-      # LinuxBuildLab.Sample
+      # 4. Restore / Build
       # ============================================================
-
-      - name: Restore sample dependencies
+      - name: Restore dependencies
         run: >
           dotnet restore
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
           --runtime linux-x64
 
-      - name: Build sample application
+      - name: Build
         run: >
           dotnet build
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
@@ -70,7 +70,10 @@ jobs:
           -p:Version=${{ env.VERSION }}
           -p:ContinuousIntegrationBuild=true
 
-      - name: Publish sample application
+      # ============================================================
+      # 5. Linux x64向けpublish
+      # ============================================================
+      - name: Publish for Linux x64
         run: >
           dotnet publish
           src/LinuxBuildLab.Sample/LinuxBuildLab.Sample.csproj
@@ -78,89 +81,172 @@ jobs:
           --runtime linux-x64
           --self-contained false
           --no-restore
-          --output publish/linux-build-lab-sample
+          --output artifacts/publish/linux-build-lab-sample
           -p:Version=${{ env.VERSION }}
           -p:ContinuousIntegrationBuild=true
 
-      # 前章との互換性を残すため、
-      # sampleアプリはZIP形式でも配布します。
-      - name: Create sample ZIP archive
+      # ============================================================
+      # 6. sbom-toolをインストール
+      # ============================================================
+      - name: Install sbom-tool
         shell: bash
         run: |
-          cd publish/linux-build-lab-sample
-          zip -r ../LinuxBuildLab.Sample-linux-x64.zip .
+          mkdir -p "$HOME/.local/bin"
 
-      - name: Create sample Debian package
+          curl -Lo "$HOME/.local/bin/sbom-tool" \
+            https://github.com/microsoft/sbom-tool/releases/latest/download/sbom-tool-linux-x64
+
+          chmod +x "$HOME/.local/bin/sbom-tool"
+
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # ============================================================
+      # 7. ONOTをインストール
+      #
+      # ローカル環境で動作確認したバージョンに固定
+      # ============================================================
+      - name: Install ONOT
         shell: bash
         run: |
-          chmod +x packaging/sample-deb/build-deb.sh
+          python3 -m venv "$RUNNER_TEMP/onot-venv"
+          source "$RUNNER_TEMP/onot-venv/bin/activate"
 
-          PACKAGE_VERSION="${VERSION}" \
-          PUBLISH_DIR="${GITHUB_WORKSPACE}/publish/linux-build-lab-sample" \
+          pip install --upgrade pip
+          pip install "onot[spdx,cyclonedx,excel,api]==1.1.2"
+
+      # ============================================================
+      # 8. SBOMを生成
+      # ============================================================
+      - name: Generate SBOM
+        shell: bash
+        run: |
+          sbom-tool generate \
+            -b ./artifacts/publish/linux-build-lab-sample \
+            -bc ./src/LinuxBuildLab.Sample \
+            -pn linux-build-lab-sample \
+            -pv "$VERSION" \
+            -ps mono-tec \
+            -nsb "https://github.com/mono-tec/mono-sample-linux-build-lab" \
+            -li true \
+            -pm true \
+            -D true
+
+      # ============================================================
+      # 9. ONOTでOSS Noticeを生成
+      # ============================================================
+      - name: Generate OSS notice
+        shell: bash
+        run: |
+          source "$RUNNER_TEMP/onot-venv/bin/activate"
+
+          rm -rf ./artifacts/license
+          mkdir -p ./artifacts/license
+
+          onot generate \
+            -i ./artifacts/publish/linux-build-lab-sample/_manifest/spdx_2.2/manifest.spdx.json \
+            -f markdown \
+            --output-dir ./artifacts/license
+
+      # ============================================================
+      # 10. Complianceファイルを整理
+      #
+      # LICENSE
+      # THIRD-PARTY-NOTICES.md
+      # sbom.spdx.json
+      # ============================================================
+      - name: Prepare compliance files
+        shell: bash
+        run: |
+          COMPLIANCE_DIR="./artifacts/compliance/linux-build-lab-sample"
+
+          rm -rf "$COMPLIANCE_DIR"
+          mkdir -p "$COMPLIANCE_DIR"
+
+          cp ./LICENSE \
+            "$COMPLIANCE_DIR/LICENSE"
+
+          NOTICE_FILE="$(find ./artifacts/license \
+            -maxdepth 1 \
+            -type f \
+            -name '*.md' \
+            | head -n 1)"
+
+          if [[ -z "$NOTICE_FILE" ]]; then
+            echo "OSS Notice file was not generated."
+            exit 1
+          fi
+
+          cp "$NOTICE_FILE" \
+            "$COMPLIANCE_DIR/THIRD-PARTY-NOTICES.md"
+
+          cp \
+            ./artifacts/publish/linux-build-lab-sample/_manifest/spdx_2.2/manifest.spdx.json \
+            "$COMPLIANCE_DIR/sbom.spdx.json"
+
+          echo "Compliance files:"
+          find "$COMPLIANCE_DIR" -maxdepth 1 -type f -print
+
+      # ============================================================
+      # 11. deb作成
+      #
+      # PACKAGE_VERSIONはGitタグ由来
+      # PUBLISH_DIRは上で生成したpublish成果物を使用
+      # ============================================================
+      - name: Build deb package
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ env.VERSION }}
+          PUBLISH_DIR: ${{ github.workspace }}/artifacts/publish/linux-build-lab-sample
+          COMPLIANCE_DIR: ${{ github.workspace }}/artifacts/compliance/linux-build-lab-sample
+        run: |
+          chmod +x ./packaging/sample-deb/build-deb.sh
           ./packaging/sample-deb/build-deb.sh
 
       # ============================================================
-      # LinuxBuildLab.Camera
+      # 12. debの内容を確認
       # ============================================================
-
-      - name: Restore camera dependencies
-        run: >
-          dotnet restore
-          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
-          --runtime linux-x64
-
-      - name: Build camera application
-        run: >
-          dotnet build
-          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
-          --configuration Release
-          --runtime linux-x64
-          --no-restore
-          -p:Version=${{ env.VERSION }}
-          -p:ContinuousIntegrationBuild=true
-
-      - name: Publish camera application
-        run: >
-          dotnet publish
-          src/LinuxBuildLab.Camera/LinuxBuildLab.Camera.csproj
-          --configuration Release
-          --runtime linux-x64
-          --self-contained false
-          --no-restore
-          --output publish/linux-build-lab-camera
-          -p:Version=${{ env.VERSION }}
-          -p:SourceRevisionId=${{ github.sha }}
-          -p:ContinuousIntegrationBuild=true
-
-      - name: Create camera Debian package
+      - name: Inspect deb package
         shell: bash
         run: |
-          chmod +x packaging/camera-deb/build-deb.sh
+          DEB_FILE="./artifacts/packages/linux-build-lab-sample_${VERSION}_amd64.deb"
 
-          PACKAGE_VERSION="${VERSION}" \
-          PUBLISH_DIR="${GITHUB_WORKSPACE}/publish/linux-build-lab-camera" \
-          ./packaging/camera-deb/build-deb.sh
+          echo "Package:"
+          ls -lh "$DEB_FILE"
+
+          echo
+          echo "Package contents:"
+          dpkg-deb --contents "$DEB_FILE"
 
       # ============================================================
-      # 成果物の登録
+      # 13. ZIPも作成
       # ============================================================
+      - name: Create ZIP archive
+        shell: bash
+        run: |
+          cd artifacts/publish/linux-build-lab-sample
+          zip -r "../../LinuxBuildLab.Sample-linux-x64-${VERSION}.zip" .
 
-      - name: Upload workflow artifacts
+      # ============================================================
+      # 14. Workflow Artifact
+      # ============================================================
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
         with:
-          name: LinuxBuildLab-linux-x64
+          name: LinuxBuildLab.Sample-${{ env.VERSION }}
           path: |
-            publish/LinuxBuildLab.Sample-linux-x64.zip
+            artifacts/LinuxBuildLab.Sample-linux-x64-${{ env.VERSION }}.zip
             artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
-            artifacts/packages/linux-build-lab-camera_${{ env.VERSION }}_amd64.deb
+            artifacts/compliance/linux-build-lab-sample/*
           if-no-files-found: error
           retention-days: 14
 
+      # ============================================================
+      # 15. GitHub Release
+      # ============================================================
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            publish/LinuxBuildLab.Sample-linux-x64.zip
+            artifacts/LinuxBuildLab.Sample-linux-x64-${{ env.VERSION }}.zip
             artifacts/packages/linux-build-lab-sample_${{ env.VERSION }}_amd64.deb
-            artifacts/packages/linux-build-lab-camera_${{ env.VERSION }}_amd64.deb
           generate_release_notes: true
