@@ -84,7 +84,7 @@ write_files:
       # 例:
       # linux-build-lab-sample_0.3.3_amd64.deb
       # --------------------------------------------------------
-      PACKAGE_URL="$$( \
+      PACKAGE_URL="$( \
         curl \
           --fail \
           --silent \
@@ -108,7 +108,7 @@ write_files:
         exit 1
       fi
 
-      PACKAGE_FILE="$$(basename "$${PACKAGE_URL}")"
+      PACKAGE_FILE="$(basename "$${PACKAGE_URL}")"
       DOWNLOAD_FILE="/tmp/$${PACKAGE_FILE}"
 
       echo "[INFO] Package URL: $${PACKAGE_URL}"
