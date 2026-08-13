@@ -14,25 +14,12 @@
 
 # ============================================================
 # パッケージ更新設定
-#
-# パッケージ一覧は更新しますが、
-# cloud-init実行時のOS全体アップグレードは行いません。
 # ============================================================
 package_update: true
 package_upgrade: false
 
 # ============================================================
 # 検証環境で使用するパッケージ
-#
-# jq:
-#   GitHub Releases APIのJSONから
-#   最新debパッケージのURLを取得するために使用します。
-#
-# dotnet-runtime-10.0:
-#   LinuxBuildLab.Cameraの実行環境として使用します。
-#
-# file:
-#   USBデバイスやファイルの確認時に使用します。
 # ============================================================
 packages:
   - git
@@ -44,9 +31,6 @@ packages:
 
 # ============================================================
 # ubuntuユーザー設定
-#
-# USBカメラへアクセスできるように、
-# ubuntuユーザーをvideoグループへ追加します。
 # ============================================================
 users:
   - name: ubuntu
@@ -62,7 +46,6 @@ users:
     ssh_authorized_keys:
       - ${ssh_public_key}
 
-# SSHは公開鍵認証のみ使用します。
 ssh_pwauth: false
 
 # ============================================================
@@ -72,12 +55,6 @@ write_files:
 
   # ----------------------------------------------------------
   # macvlan側NICのIPv4設定
-  #
-  # network_modeがdhcpの場合:
-  #   DHCPでIPv4アドレスを取得します。
-  #
-  # それ以外の場合:
-  #   Terraformから渡されたIPv4アドレスを使用します。
   # ----------------------------------------------------------
   - path: /etc/netplan/60-eth1.yaml
     owner: root:root
@@ -98,16 +75,6 @@ write_files:
 
   # ----------------------------------------------------------
   # GitHub Releasesから最新のCamera用debを取得するスクリプト
-  #
-  # バージョン番号はTerraform側では指定しません。
-  #
-  # GitHub Releasesのlatest APIを問い合わせ、
-  # linux-build-lab-camera_x.x.x_amd64.deb
-  # に一致する最新パッケージを取得します。
-  #
-  # この検証環境では過去バージョンの再現性よりも、
-  # 最新リリースがクリーンなUbuntu環境で
-  # 正常に動作することの確認を優先します。
   # ----------------------------------------------------------
   - path: /usr/local/bin/install-linux-build-lab-camera.sh
     owner: root:root
@@ -117,19 +84,11 @@ write_files:
 
       set -euo pipefail
 
-      # --------------------------------------------------------
-      # この検証環境で使用する固定値
-      #
-      # Terraform側からリポジトリ名やパッケージ名を
-      # 渡す必要はありません。
-      # --------------------------------------------------------
       PACKAGE_NAME="linux-build-lab-camera"
       GITHUB_REPOSITORY="mono-tec/mono-sample-linux-build-lab"
 
-      # Cameraパッケージに含まれるsystemdサービス名
       SERVICE_NAME="$${PACKAGE_NAME}.service"
 
-      # GitHub Releasesのlatest API
       LATEST_RELEASE_API="https://api.github.com/repos/$${GITHUB_REPOSITORY}/releases/latest"
 
       echo "[INFO] Package name: $${PACKAGE_NAME}"
@@ -140,8 +99,8 @@ write_files:
       # --------------------------------------------------------
       # 最新Releaseからamd64向けCamera debのURLを取得します。
       #
-      # 例:
-      # linux-build-lab-camera_0.3.3_amd64.deb
+      # netplan apply直後などの一時的な通信・DNS不安定に
+      # 対応するため、curl側でもリトライを行います。
       # --------------------------------------------------------
       PACKAGE_URL="$( \
         curl \
@@ -149,6 +108,9 @@ write_files:
           --silent \
           --show-error \
           --location \
+          --retry 5 \
+          --retry-delay 3 \
+          --retry-all-errors \
           "$${LATEST_RELEASE_API}" \
         | jq -r \
             --arg PACKAGE_NAME "$${PACKAGE_NAME}" \
@@ -159,9 +121,6 @@ write_files:
         | head -n 1 \
       )"
 
-      # --------------------------------------------------------
-      # debが見つからない場合はエラー終了
-      # --------------------------------------------------------
       if [[ -z "$${PACKAGE_URL}" || "$${PACKAGE_URL}" == "null" ]]; then
         echo "[ERROR] Latest release deb package was not found."
         exit 1
@@ -174,40 +133,34 @@ write_files:
       echo "[INFO] Package file: $${PACKAGE_FILE}"
 
       # --------------------------------------------------------
-      # 最新debを一時ディレクトリへダウンロード
+      # 最新debをダウンロード
       # --------------------------------------------------------
       curl \
         --fail \
         --location \
-        --retry 3 \
-        --retry-delay 5 \
+        --retry 5 \
+        --retry-delay 3 \
+        --retry-all-errors \
         --output "$${DOWNLOAD_FILE}" \
         "$${PACKAGE_URL}"
 
       # --------------------------------------------------------
       # debをインストール
-      #
-      # aptを使用することで、
-      # 依存パッケージがある場合もあわせて解決します。
       # --------------------------------------------------------
       apt-get install -y "$${DOWNLOAD_FILE}"
 
       # --------------------------------------------------------
-      # パッケージに含まれるsystemd Unitを反映します。
+      # systemd Unitを反映
       # --------------------------------------------------------
       systemctl daemon-reload
 
       # --------------------------------------------------------
-      # Cameraサンプルはoneshotサービスとして実行します。
-      #
-      # パッケージのインストールだけでなく、
-      # 実際にアプリケーションが起動できるところまで
-      # cloud-initで確認します。
+      # Cameraサンプルをoneshotサービスとして実行
       # --------------------------------------------------------
       systemctl start "$${SERVICE_NAME}"
 
       # --------------------------------------------------------
-      # ダウンロードした一時ファイルを削除
+      # 一時ファイル削除
       # --------------------------------------------------------
       rm -f "$${DOWNLOAD_FILE}"
 
@@ -219,16 +172,14 @@ write_files:
 runcmd:
 
   # ----------------------------------------------------------
-  # SSHパスワード認証は無効のまま、
-  # 公開鍵認証でubuntuユーザーへログインできるようにします。
+  # SSH公開鍵認証用ユーザー設定
   # ----------------------------------------------------------
   - |
     PASSWORD_HASH=$(openssl passwd -6 "$(openssl rand -hex 32)")
     usermod -p "$PASSWORD_HASH" ubuntu
 
   # ----------------------------------------------------------
-  # USBカメラへアクセスできるように、
-  # ubuntuユーザーをvideoグループへ追加します。
+  # USBカメラアクセス用グループ設定
   # ----------------------------------------------------------
   - usermod -aG video ubuntu
 
@@ -237,9 +188,14 @@ runcmd:
 
   # ----------------------------------------------------------
   # macvlan側NIC設定を反映
+  #
+  # netplan applyではeth0も再構成されるため、
+  # 一時的にDHCP/DNSが切り替わる可能性があります。
+  # そのため、適用後に少し待ってから外部通信を行います。
   # ----------------------------------------------------------
   - netplan generate
   - netplan apply
+  - sleep 5
 
   # ----------------------------------------------------------
   # .NET Runtime情報をログへ保存
