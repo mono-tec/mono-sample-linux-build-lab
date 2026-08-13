@@ -74,35 +74,6 @@ variable "guest_ipv4_prefix" {
   }
 }
 
-variable "github_repository" {
-  description = "GitHub repository containing the deb package release asset"
-  type        = string
-  default     = "mono-tec/mono-sample-linux-build-lab"
-}
-
-variable "package_version" {
-  description = "Version of the deb package downloaded from GitHub Release"
-  type        = string
-  default     = "0.3.1"
-
-  validation {
-    condition = can(
-      regex(
-        "^[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.-]+)?$",
-        var.package_version
-      )
-    )
-
-    error_message = "package_version must use a format such as X.Y.Z."
-  }
-}
-
-variable "package_name" {
-  description = "Name of the deb package downloaded from GitHub Release"
-  type        = string
-  default     = "linux-build-lab-camera"
-}
-
 variable "camera_device_name" {
   description = "Incus device name used for the USB camera"
   type        = string

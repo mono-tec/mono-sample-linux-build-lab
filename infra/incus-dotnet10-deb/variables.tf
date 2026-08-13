@@ -86,36 +86,3 @@ variable "guest_ipv4_prefix" {
     error_message = "guest_ipv4_prefix must be between 1 and 32."
   }
 }
-
-variable "github_repository" {
-  description = "GitHub repository containing the release asset"
-  type        = string
-  default     = "mono-tec/mono-sample-linux-build-lab"
-}
-
-variable "package_name" {
-  description = "Name of the deb package downloaded from GitHub Release"
-  type        = string
-  default     = "linux-build-lab-sample"
-
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9+.-]*$", var.package_name))
-    error_message = "package_name must use a valid Debian package name."
-  }
-}
-
-variable "package_version" {
-  description = "Version of the deb package downloaded from GitHub Release"
-  type        = string
-  default     = "0.3.1"
-
-  validation {
-    condition = can(
-      regex(
-        "^[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.-]+)?$",
-        var.package_version
-      )
-    )
-    error_message = "package_version must use a format such as X.Y.Z."
-  }
-}
