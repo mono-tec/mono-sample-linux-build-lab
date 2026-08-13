@@ -1,6 +1,18 @@
 #cloud-config
 
 # ============================================================
+# LinuxBuildLab.Camera debパッケージ検証環境
+#
+# GitHub Releasesに公開されている最新のCamera用debを取得し、
+# USBカメラを接続した新規Ubuntu環境で
+# インストール・実行できることを確認します。
+#
+# この環境は過去バージョンの再現ではなく、
+# 「現在の最新パッケージが正常に導入・実行できるか」
+# を確認する用途としています。
+# ============================================================
+
+# ============================================================
 # パッケージ更新設定
 #
 # パッケージ一覧は更新しますが、
@@ -18,6 +30,9 @@ package_upgrade: false
 #
 # dotnet-runtime-10.0:
 #   LinuxBuildLab.Cameraの実行環境として使用します。
+#
+# file:
+#   USBデバイスやファイルの確認時に使用します。
 # ============================================================
 packages:
   - git
@@ -29,6 +44,9 @@ packages:
 
 # ============================================================
 # ubuntuユーザー設定
+#
+# USBカメラへアクセスできるように、
+# ubuntuユーザーをvideoグループへ追加します。
 # ============================================================
 users:
   - name: ubuntu
@@ -54,6 +72,12 @@ write_files:
 
   # ----------------------------------------------------------
   # macvlan側NICのIPv4設定
+  #
+  # network_modeがdhcpの場合:
+  #   DHCPでIPv4アドレスを取得します。
+  #
+  # それ以外の場合:
+  #   Terraformから渡されたIPv4アドレスを使用します。
   # ----------------------------------------------------------
   - path: /etc/netplan/60-eth1.yaml
     owner: root:root
@@ -77,13 +101,13 @@ write_files:
   #
   # バージョン番号はTerraform側では指定しません。
   #
-  # GitHub Releasesの「latest」を問い合わせ、
-  # PACKAGE_NAME_x.x.x_amd64.deb に一致する
-  # 最新のdebパッケージを取得します。
+  # GitHub Releasesのlatest APIを問い合わせ、
+  # linux-build-lab-camera_x.x.x_amd64.deb
+  # に一致する最新パッケージを取得します。
   #
-  # このIncus環境は「最新パッケージが新規Linux環境で
-  # 正常にインストール・実行できるか」の検証用なので、
-  # 再現性よりも最新版追従を優先しています。
+  # この検証環境では過去バージョンの再現性よりも、
+  # 最新リリースがクリーンなUbuntu環境で
+  # 正常に動作することの確認を優先します。
   # ----------------------------------------------------------
   - path: /usr/local/bin/install-linux-build-lab-camera.sh
     owner: root:root
@@ -94,15 +118,18 @@ write_files:
       set -euo pipefail
 
       # --------------------------------------------------------
-      # Terraformから渡される値
+      # この検証環境で使用する固定値
+      #
+      # Terraform側からリポジトリ名やパッケージ名を
+      # 渡す必要はありません。
       # --------------------------------------------------------
-      PACKAGE_NAME="${package_name}"
-      GITHUB_REPOSITORY="${github_repository}"
+      PACKAGE_NAME="linux-build-lab-camera"
+      GITHUB_REPOSITORY="mono-tec/mono-sample-linux-build-lab"
 
-      # systemdサービス名
+      # Cameraパッケージに含まれるsystemdサービス名
       SERVICE_NAME="$${PACKAGE_NAME}.service"
 
-      # GitHub Releases API
+      # GitHub Releasesのlatest API
       LATEST_RELEASE_API="https://api.github.com/repos/$${GITHUB_REPOSITORY}/releases/latest"
 
       echo "[INFO] Package name: $${PACKAGE_NAME}"
@@ -111,10 +138,10 @@ write_files:
       echo "[INFO] Service name: $${SERVICE_NAME}"
 
       # --------------------------------------------------------
-      # 最新Releaseからamd64向けdebのURLを取得
+      # 最新Releaseからamd64向けCamera debのURLを取得します。
       #
       # 例:
-      # linux-build-lab-camera_0.3.2_amd64.deb
+      # linux-build-lab-camera_0.3.3_amd64.deb
       # --------------------------------------------------------
       PACKAGE_URL="$$( \
         curl \
@@ -132,7 +159,9 @@ write_files:
         | head -n 1 \
       )"
 
-      # URLが取得できなかった場合は処理を中止
+      # --------------------------------------------------------
+      # debが見つからない場合はエラー終了
+      # --------------------------------------------------------
       if [[ -z "$${PACKAGE_URL}" || "$${PACKAGE_URL}" == "null" ]]; then
         echo "[ERROR] Latest release deb package was not found."
         exit 1
@@ -145,7 +174,7 @@ write_files:
       echo "[INFO] Package file: $${PACKAGE_FILE}"
 
       # --------------------------------------------------------
-      # debパッケージをダウンロード
+      # 最新debを一時ディレクトリへダウンロード
       # --------------------------------------------------------
       curl \
         --fail \
@@ -156,27 +185,36 @@ write_files:
         "$${PACKAGE_URL}"
 
       # --------------------------------------------------------
-      # debパッケージをインストール
+      # debをインストール
       #
-      # aptを使用することで、依存パッケージがある場合も
-      # あわせて解決させます。
+      # aptを使用することで、
+      # 依存パッケージがある場合もあわせて解決します。
       # --------------------------------------------------------
       apt-get install -y "$${DOWNLOAD_FILE}"
 
       # --------------------------------------------------------
-      # systemd設定を再読込し、
-      # Cameraサンプルのoneshotサービスを実行
+      # パッケージに含まれるsystemd Unitを反映します。
       # --------------------------------------------------------
       systemctl daemon-reload
+
+      # --------------------------------------------------------
+      # Cameraサンプルはoneshotサービスとして実行します。
+      #
+      # パッケージのインストールだけでなく、
+      # 実際にアプリケーションが起動できるところまで
+      # cloud-initで確認します。
+      # --------------------------------------------------------
       systemctl start "$${SERVICE_NAME}"
 
+      # --------------------------------------------------------
       # ダウンロードした一時ファイルを削除
+      # --------------------------------------------------------
       rm -f "$${DOWNLOAD_FILE}"
 
       echo "[INFO] Camera package installation completed."
 
 # ============================================================
-# 初回起動時の処理
+# 初回起動時に実行する処理
 # ============================================================
 runcmd:
 
@@ -189,7 +227,7 @@ runcmd:
     usermod -p "$PASSWORD_HASH" ubuntu
 
   # ----------------------------------------------------------
-  # USBカメラへアクセスできるように
+  # USBカメラへアクセスできるように、
   # ubuntuユーザーをvideoグループへ追加します。
   # ----------------------------------------------------------
   - usermod -aG video ubuntu
@@ -197,15 +235,19 @@ runcmd:
   # SSHサーバーを有効化
   - systemctl enable --now ssh
 
+  # ----------------------------------------------------------
   # macvlan側NIC設定を反映
+  # ----------------------------------------------------------
   - netplan generate
   - netplan apply
 
+  # ----------------------------------------------------------
   # .NET Runtime情報をログへ保存
+  # ----------------------------------------------------------
   - dotnet --info > /var/log/dotnet-runtime-info.log 2>&1
 
   # ----------------------------------------------------------
-  # GitHub Releasesから最新のCamera用debを取得し、
+  # GitHub Releasesのlatestから最新Camera debを取得し、
   # インストール後にoneshotサービスを実行します。
   # ----------------------------------------------------------
   - /usr/local/bin/install-linux-build-lab-camera.sh > /var/log/linux-build-lab-camera-install.log 2>&1

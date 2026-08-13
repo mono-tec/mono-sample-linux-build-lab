@@ -63,10 +63,13 @@ write_files:
       set -euo pipefail
 
       # --------------------------------------------------------
-      # Terraformから渡される設定
+      # この検証環境で使用する固定値
+      #
+      # Terraform側からリポジトリ名やパッケージ名を
+      # 渡す必要はありません。
       # --------------------------------------------------------
-      PACKAGE_NAME="${package_name}"
-      GITHUB_REPOSITORY="${github_repository}"
+      PACKAGE_NAME="linux-build-lab-sample"
+      GITHUB_REPOSITORY="mono-tec/mono-sample-linux-build-lab"
 
       # GitHub Releasesのlatest API
       LATEST_RELEASE_API="https://api.github.com/repos/$${GITHUB_REPOSITORY}/releases/latest"
@@ -79,7 +82,7 @@ write_files:
       # 最新Releaseからamd64向けdebを探します。
       #
       # 例:
-      # linux-build-lab-sample_0.3.2_amd64.deb
+      # linux-build-lab-sample_0.3.3_amd64.deb
       # --------------------------------------------------------
       PACKAGE_URL="$$( \
         curl \
@@ -97,7 +100,9 @@ write_files:
         | head -n 1 \
       )"
 
+      # --------------------------------------------------------
       # debが見つからない場合はエラー終了
+      # --------------------------------------------------------
       if [[ -z "$${PACKAGE_URL}" || "$${PACKAGE_URL}" == "null" ]]; then
         echo "[ERROR] Latest release deb package was not found."
         exit 1
@@ -122,13 +127,21 @@ write_files:
 
       # --------------------------------------------------------
       # debをインストール
+      #
+      # aptを使用することで、
+      # 依存パッケージがある場合もあわせて解決します。
       # --------------------------------------------------------
       apt-get install -y "$${DOWNLOAD_FILE}"
 
-      # systemd Unitがパッケージに含まれている場合に備えて再読込
+      # --------------------------------------------------------
+      # パッケージにsystemd Unitが含まれている場合に備えて、
+      # systemd設定を再読込します。
+      # --------------------------------------------------------
       systemctl daemon-reload
 
+      # --------------------------------------------------------
       # ダウンロードした一時ファイルを削除
+      # --------------------------------------------------------
       rm -f "$${DOWNLOAD_FILE}"
 
       echo "[INFO] Sample package installation completed."
@@ -148,10 +161,13 @@ runcmd:
   # SSHサーバーを起動
   - systemctl enable --now ssh
 
-  # .NET Runtime情報を保存
+  # ----------------------------------------------------------
+  # .NET Runtime情報をログへ保存
+  # ----------------------------------------------------------
   - dotnet --info > /var/log/dotnet-runtime-info.log 2>&1
 
   # ----------------------------------------------------------
-  # GitHub Releasesの最新Sample debを取得してインストール
+  # GitHub Releasesのlatestから最新Sample debを取得し、
+  # インストールします。
   # ----------------------------------------------------------
   - /usr/local/bin/install-linux-build-lab-sample.sh > /var/log/linux-build-lab-sample-install.log 2>&1
