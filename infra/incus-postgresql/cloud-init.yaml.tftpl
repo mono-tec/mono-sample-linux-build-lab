@@ -1,0 +1,137 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+write_files:
+  - path: /etc/netplan/60-eth1.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth1:
+%{ if network_mode == "dhcp" ~}
+            dhcp4: true
+%{ else ~}
+            dhcp4: false
+            addresses:
+              - ${guest_ipv4_address}/${guest_ipv4_prefix}
+%{ endif }
+            dhcp6: true
+
+  - path: /usr/local/sbin/setup-postgresql-lab.sh
+    owner: root:root
+    permissions: "0700"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      export DEBIAN_FRONTEND=noninteractive
+
+      PG_VERSION="${postgresql_version}"
+      DB_NAME="${db_name}"
+      DB_USER="${db_user}"
+      DB_PASSWORD="${db_password}"
+      DB_CLIENT_CIDR="${db_client_cidr}"
+
+      echo "[INFO] Configure PGDG repository."
+
+      apt-get update
+      apt-get install -y ca-certificates curl postgresql-common
+
+      install -d -m 0755 /usr/share/postgresql-common/pgdg
+      curl \
+        --fail \
+        --location \
+        --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+      . /etc/os-release
+
+      cat > /etc/apt/sources.list.d/pgdg.sources <<EOF
+      Types: deb
+      URIs: https://apt.postgresql.org/pub/repos/apt
+      Suites: $${VERSION_CODENAME}-pgdg
+      Components: main
+      Signed-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+      EOF
+
+      apt-get update
+      apt-get install -y "postgresql-$${PG_VERSION}" "postgresql-client-$${PG_VERSION}"
+
+      PG_CONF="/etc/postgresql/$${PG_VERSION}/main/postgresql.conf"
+      PG_HBA="/etc/postgresql/$${PG_VERSION}/main/pg_hba.conf"
+
+      echo "[INFO] Configure PostgreSQL remote access."
+
+      sed -ri \
+        "s/^[#[:space:]]*listen_addresses[[:space:]]*=.*/listen_addresses = '*'/" \
+        "$${PG_CONF}"
+
+      if ! grep -Fq "host    $${DB_NAME}    $${DB_USER}    $${DB_CLIENT_CIDR}    scram-sha-256" "$${PG_HBA}"; then
+        cat >> "$${PG_HBA}" <<EOF
+
+      # Linux Build Lab: allow the configured LAN only
+      host    $${DB_NAME}    $${DB_USER}    $${DB_CLIENT_CIDR}    scram-sha-256
+      EOF
+      fi
+
+      systemctl restart postgresql
+
+      echo "[INFO] Create lab role and database."
+
+      if ! sudo -u postgres psql -tAc \
+        "SELECT 1 FROM pg_roles WHERE rolname = '$${DB_USER}'" | grep -q 1; then
+        sudo -u postgres psql \
+          -v ON_ERROR_STOP=1 \
+          -c "CREATE ROLE $${DB_USER} LOGIN PASSWORD '$${DB_PASSWORD}';"
+      else
+        sudo -u postgres psql \
+          -v ON_ERROR_STOP=1 \
+          -c "ALTER ROLE $${DB_USER} WITH LOGIN PASSWORD '$${DB_PASSWORD}';"
+      fi
+
+      if ! sudo -u postgres psql -tAc \
+        "SELECT 1 FROM pg_database WHERE datname = '$${DB_NAME}'" | grep -q 1; then
+        sudo -u postgres createdb \
+          --owner="$${DB_USER}" \
+          --encoding=UTF8 \
+          "$${DB_NAME}"
+      fi
+
+      sudo -u postgres psql \
+        -v ON_ERROR_STOP=1 \
+        -d "$${DB_NAME}" \
+        -c "CREATE TABLE IF NOT EXISTS public.sample_table (
+              column1 VARCHAR(20),
+              column2 TIMESTAMP,
+              column3 REAL
+            );"
+
+      sudo -u postgres psql \
+        -v ON_ERROR_STOP=1 \
+        -d "$${DB_NAME}" \
+        -c "ALTER TABLE public.sample_table OWNER TO $${DB_USER};"
+
+      systemctl enable postgresql
+      systemctl restart postgresql
+
+      {
+        echo "PostgreSQL version:"
+        psql --version
+        echo
+        echo "Cluster:"
+        pg_lsclusters
+        echo
+        echo "Listening sockets:"
+        ss -lntp | grep ':5432' || true
+      } > /var/log/postgresql-lab-setup.log 2>&1
+
+      echo "[INFO] PostgreSQL lab setup completed."
+
+runcmd:
+  - netplan generate
+  - netplan apply
+  - /usr/local/sbin/setup-postgresql-lab.sh

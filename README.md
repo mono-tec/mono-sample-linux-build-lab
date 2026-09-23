@@ -2,7 +2,9 @@
 
 「Linux Build Lab」シリーズの記事原稿と、記事で使用するサンプルコードです。
 
-OpenTofuとIncusを使用してUbuntuコンテナを繰り返し構築し、.NET 10アプリのビルド、配布、systemd実行、USBカメラ連携までを段階的に検証します。
+OpenTofuとIncusを使用してUbuntuコンテナを繰り返し構築し、.NET 10アプリのビルド、配布、systemd実行、USBカメラ連携、PostgreSQL検証環境などを段階的に検証します。
+
+また、PostgreSQL環境では、実環境から取得したバックアップを使い捨て環境へ復元し、pgTAPを使用して関数やトリガーなどのDBロジックを繰り返し検証できる構成も扱います。
 
 また、GitHub Actionsを使用して、
 
@@ -35,32 +37,38 @@ OpenTofuとIncusを使用してUbuntuコンテナを繰り返し構築し、.NET
 ├─ infra/
 │  ├─ incus/
 │  ├─ incus-dotnet10/
-│  ├─ incus-dotnet10-runtime/
 │  ├─ incus-dotnet10-deb/
-│  │  ├─ scripts/
-│  │  │  └─ create-terraform-tfvars.sh
-│  │  ├─ cloud-init.yaml.tftpl
-│  │  ├─ main.tf
-│  │  ├─ outputs.tf
-│  │  ├─ terraform.tfvars.example
-│  │  ├─ variables.tf
-│  │  └─ README.md
+│  ├─ incus-dotnet10-lan/
+│  ├─ incus-postgresql/
+│  ├─ incus-sakura-ai-agent/
+│  ├─ incus-sakura-ai-team/
 │  └─ incus-usb-camera/
-│     ├─ scripts/
-│     │  └─ create-terraform-tfvars.sh
-│     ├─ cloud-init.yaml.tftpl
-│     ├─ main.tf
-│     ├─ outputs.tf
-│     ├─ terraform.tfvars.example
-│     ├─ variables.tf
-│     └─ README.md
 ├─ packaging/
 │  ├─ sample-deb/
+│  │  ├─ package/
 │  │  ├─ build-deb.sh
 │  │  └─ linux-build-lab-sample.service
 │  └─ camera-deb/
+│     ├─ package/
 │     ├─ build-deb.sh
 │     └─ linux-build-lab-camera.service
+├─ samples/
+│  ├─ sakura-ai-agent/
+│  │  └─ hello-dotnet-result/
+│  └─ pgtap-lab/
+│     ├─ backup/
+│     │  └─ README.md
+│     ├─ fixtures/
+│     │  ├─ settings.sql
+│     │  └─ test-data.sql
+│     ├─ scripts/
+│     │  ├─ restore.sh
+│     │  └─ test.sh
+│     ├─ tests/
+│     │  ├─ 001_function.sql
+│     │  ├─ 002_trigger.sql
+│     │  └─ 003_result.sql
+│     └─ README.md
 ├─ scripts/
 │  ├─ linux/
 │  │  └─ generate-linux-compliance.sh
@@ -68,11 +76,7 @@ OpenTofuとIncusを使用してUbuntuコンテナを繰り返し構築し、.NET
 │     └─ create-ssh-key.ps1
 ├─ src/
 │  ├─ LinuxBuildLab.Sample/
-│  │  ├─ LinuxBuildLab.Sample.csproj
-│  │  └─ Program.cs
 │  └─ LinuxBuildLab.Camera/
-│     ├─ LinuxBuildLab.Camera.csproj
-│     └─ Program.cs
 ├─ .gitattributes
 ├─ .gitignore
 ├─ LICENSE
@@ -156,6 +160,86 @@ infra/incus-usb-camera
 ```text
 infra/incus-usb-camera/README.md
 ```
+
+---
+
+## Additional Labs
+
+### PostgreSQL / pgTAP Lab
+
+IncusとOpenTofuを使用して、使い捨て可能なPostgreSQL検証環境を構築します。
+
+PostgreSQL環境の作成は次のディレクトリで管理します。
+
+```text
+infra/incus-postgresql
+```
+
+DBロジックの検証に使用するpgTAP関連ファイルは、次のディレクトリで管理します。
+
+```text
+samples/pgtap-lab
+```
+
+役割は次のように分けています。
+
+```text
+infra/incus-postgresql
+  ↓
+Incusコンテナを作成
+  ↓
+PostgreSQL環境を構築
+  ↓
+samples/pgtap-lab
+  ↓
+DBバックアップを復元
+  ↓
+テスト用設定・データを投入
+  ↓
+pgTAPでテスト
+  ↓
+検証終了後にコンテナを破棄
+```
+
+`pgtap-lab`では、次のような構成でテスト資材を管理します。
+
+```text
+samples/pgtap-lab/
+├─ backup/
+│  └─ base.dump
+├─ fixtures/
+│  ├─ settings.sql
+│  └─ test-data.sql
+├─ scripts/
+│  ├─ restore.sh
+│  └─ test.sh
+└─ tests/
+   ├─ 001_function.sql
+   ├─ 002_trigger.sql
+   └─ 003_result.sql
+```
+
+`backup/base.dump`には、検証対象となるPostgreSQLデータベースのバックアップを配置します。
+
+このバックアップは実環境由来のデータを含む可能性があるため、Git管理対象には含めません。
+
+想定する検証フローは次のとおりです。
+
+```text
+pg_dump / pg_restore
+  ↓
+クリーンなPostgreSQLへ復元
+  ↓
+必要なFunction / Triggerを適用
+  ↓
+テスト用設定値を投入
+  ↓
+最小テストデータを投入
+  ↓
+pg_proveによるpgTAPテスト
+```
+
+通常利用しているPostgreSQL環境とは分離することで、PLCやアプリケーションが接続しているローカルDBへ影響を与えずに、DBロジックを繰り返し検証できる環境を目指します。
 
 ---
 
@@ -466,6 +550,7 @@ Gitへ登録する主なファイル：
 *.tftpl
 terraform.tfvars.example
 scripts/
+samples/
 README.md
 src/
 packaging/
@@ -486,6 +571,7 @@ publish/
 bin/
 obj/
 private-scripts/
+samples/pgtap-lab/backup/*.dump
 ```
 
 ---
@@ -527,6 +613,7 @@ LICENSE
 
 - `.tfstate`、`terraform.tfvars`、`artifacts/`はGit管理対象外です。
 - SSH秘密鍵はGitへ登録しないでください。
+- `samples/pgtap-lab/backup/`へ配置する実DBバックアップはGitへ登録しないでください。
 - cloud-initは基本的にコンテナの初回起動時に実行されます。
 - cloud-initの変更を確認する場合は、既存コンテナを削除して再作成してください。
 - USBカメラのデバイス名や`video`グループの設定は、利用環境に合わせて確認してください。
