@@ -1,13 +1,19 @@
-instance_name = "ubuntu2404-postgresql17-lab"
+# Incus container
+container_name = "ubuntu2404-postgresql17-lab"
+cpu_limit      = "2"
+memory_limit   = "2GiB"
 
-lan_interface       = "eno1"
-network_mode        = "dhcp"
-guest_ipv4_address  = ""
-guest_ipv4_prefix   = 24
+# Ubuntu host LAN interface used by macvlan
+lan_interface = "eno1"
 
-postgresql_version = 17
+# IPv4 configuration for eth1
+network_mode       = "dhcp"
+guest_ipv4_address = ""
+guest_ipv4_prefix  = 24
 
-db_name        = "labdb"
-db_user        = "labuser"
-db_password    = "CHANGE_ME_1234"
-db_client_cidr = "192.168.1.0/24"
+# PostgreSQL
+postgresql_version = "17"
+
+# Example only.
+# Replace this value by running scripts/create-terraform-tfvars.sh.
+postgres_password = "ChangeMe1234"

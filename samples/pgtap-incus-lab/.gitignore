@@ -1,9 +1,4 @@
-# Real database backups should not be committed by default.
+config.env
 backup/*.dump
-!backup/.gitkeep
-
-# Local environment files
-.env
-
-# Test output
-*.log
+backup/*.backup
+backup/*.tar

@@ -1,62 +1,57 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-BACKUP_FILE="${BACKUP_FILE:-${REPO_ROOT}/backup/base.dump}"
-PGDATABASE="${PGDATABASE:-pgtap_lab}"
-PGHOST="${PGHOST:-/var/run/postgresql}"
-PGPORT="${PGPORT:-5432}"
-PGUSER="${PGUSER:-postgres}"
+LAB_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CONFIG_FILE="${LAB_DIR}/config.env"
 
-export PGHOST PGPORT PGUSER
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+  echo "[ERROR] config.env が見つかりません。"
+  echo "[INFO] static IPでcreate-terraform-tfvars.shを実行するか、手動で作成してください。"
+  exit 1
+fi
 
-case "${PGDATABASE}" in
-  postgres|template0|template1)
-    echo "ERROR: Refusing to recreate protected database: ${PGDATABASE}" >&2
-    exit 1
-    ;;
-esac
+# shellcheck disable=SC1090
+source "${CONFIG_FILE}"
+
+: "${DB_HOST:?DB_HOST is required}"
+: "${DB_PORT:=5432}"
+: "${DB_USER:=postgres}"
+
+DB_NAME="${1:-testdb}"
+BACKUP_FILE="${2:-${LAB_DIR}/backup/base.dump}"
 
 if [[ ! -f "${BACKUP_FILE}" ]]; then
-  echo "ERROR: Backup file not found: ${BACKUP_FILE}" >&2
-  echo "Place a pg_dump -Fc backup at backup/base.dump or set BACKUP_FILE." >&2
+  echo "[ERROR] バックアップファイルが見つかりません: ${BACKUP_FILE}"
   exit 1
 fi
 
-if [[ ! -s "${BACKUP_FILE}" ]]; then
-  echo "ERROR: Backup file is empty: ${BACKUP_FILE}" >&2
-  exit 1
-fi
+echo "[INFO] Target: ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 
-for cmd in dropdb createdb pg_restore psql; do
-  if ! command -v "${cmd}" >/dev/null 2>&1; then
-    echo "ERROR: Required command not found: ${cmd}" >&2
-    exit 1
-  fi
-done
+psql \
+  -h "${DB_HOST}" \
+  -p "${DB_PORT}" \
+  -U "${DB_USER}" \
+  -d postgres \
+  -v ON_ERROR_STOP=1 \
+  -c "DROP DATABASE IF EXISTS \"${DB_NAME}\";"
 
-echo "[1/6] Recreating database: ${PGDATABASE}"
-dropdb --if-exists "${PGDATABASE}"
-createdb "${PGDATABASE}"
+psql \
+  -h "${DB_HOST}" \
+  -p "${DB_PORT}" \
+  -U "${DB_USER}" \
+  -d postgres \
+  -v ON_ERROR_STOP=1 \
+  -c "CREATE DATABASE \"${DB_NAME}\";"
 
-echo "[2/6] Restoring backup: ${BACKUP_FILE}"
 pg_restore \
-  --exit-on-error \
+  -h "${DB_HOST}" \
+  -p "${DB_PORT}" \
+  -U "${DB_USER}" \
+  -d "${DB_NAME}" \
   --no-owner \
   --no-privileges \
-  --dbname="${PGDATABASE}" \
   "${BACKUP_FILE}"
 
-echo "[3/6] Enabling pgTAP"
-psql --dbname="${PGDATABASE}" --set=ON_ERROR_STOP=1 \
-  --command='CREATE EXTENSION IF NOT EXISTS pgtap;'
-
-echo "[4/6] Loading fixtures/settings.sql"
-psql --dbname="${PGDATABASE}" --file="${REPO_ROOT}/fixtures/settings.sql"
-
-echo "[5/6] Loading fixtures/test-data.sql"
-psql --dbname="${PGDATABASE}" --file="${REPO_ROOT}/fixtures/test-data.sql"
-
-echo "[6/6] Restore completed"
-echo "Database: ${PGDATABASE}"
+echo "[INFO] Restore completed."
